@@ -63,6 +63,19 @@ async function initDb() {
         try { await db.execute(`ALTER TABLE rooms ADD COLUMN creator_id INTEGER`); } catch(e){}
         try { await db.execute(`ALTER TABLE rooms ADD COLUMN is_locked INTEGER DEFAULT 0`); } catch(e){}
         try { await db.execute(`ALTER TABLE messages ADD COLUMN reply_to_id INTEGER`); } catch(e){}
+        try { await db.execute(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`); } catch(e){}
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            category TEXT,
+            title TEXT,
+            description TEXT,
+            status TEXT DEFAULT 'pending',
+            admin_note TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )`);
 
         await db.execute(`CREATE TABLE IF NOT EXISTS room_members (
             room_id INTEGER,
@@ -157,11 +170,12 @@ app.post('/api/register', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: "Nom d'utilisateur et mot de passe requis." });
 
+    const role = (username.toLowerCase() === 'admin') ? 'admin' : 'user';
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await db.execute({
-            sql: `INSERT INTO users (username, password) VALUES (?, ?)`,
-            args: [username, hashedPassword]
+            sql: `INSERT INTO users (username, password, role) VALUES (?, ?, ?)`,
+            args: [username, hashedPassword, role]
         });
         
         const userId = Number(result.lastInsertRowid);
@@ -188,8 +202,8 @@ app.post('/api/login', async (req, res) => {
         const match = await bcrypt.compare(password, user.password);
         if (!match) return res.status(401).json({ error: 'Identifiants incorrects.' });
 
-        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
-        res.json({ token, user: { id: user.id, username: user.username } });
+        const token = jwt.sign({ id: user.id, username: user.username, role: user.role || 'user' }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token, user: { id: user.id, username: user.username, role: user.role || 'user' } });
     } catch (error) {
         res.status(500).json({ error: 'Erreur serveur.' });
     }
@@ -197,10 +211,226 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/users', async (req, res) => {
     try {
-        const result = await db.execute(`SELECT id, username, status, last_seen FROM users`);
+        const result = await db.execute(`SELECT id, username, status, last_seen, role FROM users`);
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
+// --- SUPPORT TICKETS & ADMIN API ---
+
+// Support tickets endpoint
+app.get('/api/tickets', authenticateToken, async (req, res) => {
+    try {
+        let result;
+        if (req.user.role === 'admin') {
+            // Admin receives ALL complaints with details of the submitter
+            result = await db.execute(`
+                SELECT t.*, u.username 
+                FROM tickets t 
+                JOIN users u ON t.user_id = u.id 
+                ORDER BY t.id DESC
+            `);
+        } else {
+            // Standard user receives only their own complaints
+            result = await db.execute({
+                sql: `SELECT * FROM tickets WHERE user_id = ? ORDER BY id DESC`,
+                args: [req.user.id]
+            });
+        }
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
+app.post('/api/tickets', authenticateToken, async (req, res) => {
+    const { category, title, description } = req.body;
+    if (!category || !title || !description) {
+        return res.status(400).json({ error: "Tous les champs sont requis." });
+    }
+    
+    try {
+        const result = await db.execute({
+            sql: `INSERT INTO tickets (user_id, category, title, description) VALUES (?, ?, ?, ?)`,
+            args: [req.user.id, category, title, description]
+        });
+        const ticketId = Number(result.lastInsertRowid);
+        
+        // Notify admin sockets about the new ticket if possible
+        io.emit('new_ticket', { id: ticketId, category, title, description, user_id: req.user.id, username: req.user.username });
+        
+        res.status(201).json({ success: true, message: "Plainte enregistrée avec succès.", id: ticketId });
+    } catch (error) {
+        res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
+// Admin Action: Resolve / respond to ticket
+app.post('/api/tickets/:id/resolve', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: "Accès refusé. Admin uniquement." });
+    const ticketId = Number(req.params.id);
+    const { admin_note, status } = req.body; // status can be resolved or open
+    const finalStatus = status || 'resolved';
+
+    try {
+        await db.execute({
+            sql: `UPDATE tickets SET status = ?, admin_note = ? WHERE id = ?`,
+            args: [finalStatus, admin_note || '', ticketId]
+        });
+        
+        // Notify the specific ticket owner
+        const ticketRes = await db.execute({
+            sql: `SELECT user_id FROM tickets WHERE id = ?`,
+            args: [ticketId]
+        });
+        
+        if (ticketRes.rows.length > 0) {
+            const userId = Number(ticketRes.rows[0].user_id);
+            const sockets = await io.fetchSockets();
+            for (const s of sockets) {
+                if (s.user && Number(s.user.id) === userId) {
+                    s.emit('ticket_updated', { id: ticketId, status: finalStatus, admin_note });
+                }
+            }
+        }
+        
+        res.json({ success: true, message: "Ticket mis à jour avec succès." });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur serveur." });
+    }
+});
+
+// Admin Action: View all users list
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: "Accès refusé. Admin uniquement." });
+    try {
+        const result = await db.execute(`SELECT id, username, role, status FROM users ORDER BY username ASC`);
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: "Erreur serveur." });
+    }
+});
+
+// Admin Action: Change user role
+app.post('/api/admin/users/:id/role', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: "Accès refusé. Admin uniquement." });
+    const targetUserId = Number(req.params.id);
+    const { role } = req.body;
+    if (role !== 'user' && role !== 'admin') return res.status(400).json({ error: "Rôle invalide." });
+    
+    // Prevent admin from removing their own admin status
+    if (targetUserId === req.user.id) return res.status(400).json({ error: "Vous ne pouvez pas modifier votre propre rôle." });
+
+    try {
+        await db.execute({
+            sql: `UPDATE users SET role = ? WHERE id = ?`,
+            args: [role, targetUserId]
+        });
+        
+        // Notify the target user to re-authenticate or refresh their UI
+        const sockets = await io.fetchSockets();
+        for (const s of sockets) {
+            if (s.user && Number(s.user.id) === targetUserId) {
+                s.emit('role_changed', { role });
+            }
+        }
+        
+        res.json({ success: true, message: `Rôle mis à jour avec succès.` });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur serveur." });
+    }
+});
+
+// Admin Action: Delete/Ban User
+app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: "Accès refusé. Admin uniquement." });
+    const targetUserId = Number(req.params.id);
+    
+    if (targetUserId === req.user.id) return res.status(400).json({ error: "Vous ne pouvez pas supprimer votre propre compte." });
+
+    try {
+        // Delete user's messages, room_members, and user entry
+        await db.execute({ sql: `DELETE FROM messages WHERE sender_id = ?`, args: [targetUserId] });
+        await db.execute({ sql: `DELETE FROM room_members WHERE user_id = ?`, args: [targetUserId] });
+        await db.execute({ sql: `DELETE FROM tickets WHERE user_id = ?`, args: [targetUserId] });
+        await db.execute({ sql: `DELETE FROM users WHERE id = ?`, args: [targetUserId] });
+        
+        // Disconnect and log out target user sockets
+        const sockets = await io.fetchSockets();
+        for (const s of sockets) {
+            if (s.user && Number(s.user.id) === targetUserId) {
+                s.emit('user_banned');
+                s.disconnect(true);
+            }
+        }
+        
+        io.emit('user_status_change', { userId: targetUserId, status: 'offline' });
+        res.json({ success: true, message: "Compte utilisateur supprimé avec succès." });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur serveur." });
+    }
+});
+
+// Admin/Creator Action: Delete Message
+app.delete('/api/messages/:id', authenticateToken, async (req, res) => {
+    const msgId = Number(req.params.id);
+    try {
+        const msgRes = await db.execute({
+            sql: `SELECT * FROM messages WHERE id = ?`,
+            args: [msgId]
+        });
+        const msg = msgRes.rows[0];
+        if (!msg) return res.status(404).json({ error: "Message introuvable" });
+
+        // Allowed if user is admin OR if user is the sender of the message
+        if (req.user.role !== 'admin' && Number(msg.sender_id) !== Number(req.user.id)) {
+            return res.status(403).json({ error: "Action non autorisée." });
+        }
+
+        // Delete from database
+        await db.execute({
+            sql: `DELETE FROM messages WHERE id = ?`,
+            args: [msgId]
+        });
+
+        // Notify client sockets about message deletion in real-time
+        io.emit('message_deleted', { id: msgId, roomId: msg.room_id });
+        res.json({ success: true, message: "Message supprimé avec succès." });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur serveur." });
+    }
+});
+
+// Admin/Creator Action: Delete Room
+app.delete('/api/rooms/:id', authenticateToken, async (req, res) => {
+    const roomId = Number(req.params.id);
+    if (roomId === 1) return res.status(400).json({ error: "Impossible de supprimer le canal Général." });
+
+    try {
+        const roomRes = await db.execute({
+            sql: `SELECT * FROM rooms WHERE id = ?`,
+            args: [roomId]
+        });
+        const room = roomRes.rows[0];
+        if (!room) return res.status(404).json({ error: "Canal introuvable" });
+
+        // Allowed if user is admin OR if user is the creator of the room
+        if (req.user.role !== 'admin' && Number(room.creator_id) !== Number(req.user.id)) {
+            return res.status(403).json({ error: "Action non autorisée." });
+        }
+
+        // Delete all messages in the room
+        await db.execute({ sql: `DELETE FROM messages WHERE room_id = ?`, args: [roomId] });
+        await db.execute({ sql: `DELETE FROM room_members WHERE room_id = ?`, args: [roomId] });
+        await db.execute({ sql: `DELETE FROM rooms WHERE id = ?`, args: [roomId] });
+
+        // Notify client sockets in real-time
+        io.emit('room_deleted', { roomId });
+        res.json({ success: true, message: "Canal supprimé avec succès." });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur serveur." });
     }
 });
 

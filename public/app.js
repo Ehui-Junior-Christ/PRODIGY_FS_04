@@ -156,6 +156,15 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUsername.textContent = currentUser.username;
         currentUserAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
 
+        const openAdminBtn = document.getElementById('open-admin-btn');
+        if (openAdminBtn) {
+            if (currentUser && currentUser.role === 'admin') {
+                openAdminBtn.classList.remove('hidden');
+            } else {
+                openAdminBtn.classList.add('hidden');
+            }
+        }
+
         if ('Notification' in window) {
             if (Notification.permission === 'default') {
                 Notification.requestPermission();
@@ -457,6 +466,68 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.on('room_created', (room) => {
             fetchRooms();
+        });
+
+        socket.on('message_deleted', (data) => {
+            const msgEl = document.getElementById('msg-' + data.id);
+            if (msgEl) {
+                msgEl.style.transition = 'all 0.3s ease';
+                msgEl.style.opacity = '0';
+                msgEl.style.transform = 'scale(0.9)';
+                setTimeout(() => {
+                    msgEl.remove();
+                }, 300);
+            }
+        });
+
+        socket.on('room_deleted', (data) => {
+            if (Number(currentRoomId) === Number(data.roomId)) {
+                alert("Ce canal a été supprimé par un administrateur.");
+                switchRoom(1, 'Général');
+            }
+            fetchRooms();
+        });
+
+        socket.on('new_ticket', (ticket) => {
+            if (currentUser && currentUser.role === 'admin') {
+                showToastNotification({
+                    username: ticket.username,
+                    content: `Nouvelle plainte: ${ticket.title} (Catégorie: ${ticket.category})`,
+                    room_name: 'Console Admin'
+                });
+                
+                const adminModal = document.getElementById('admin-modal');
+                if (adminModal && !adminModal.classList.contains('hidden')) {
+                    fetchAdminTickets();
+                }
+            }
+        });
+
+        socket.on('ticket_updated', (data) => {
+            showToastNotification({
+                username: 'Support Admin',
+                content: `Votre plainte #${data.id} a été résolue ! Note: ${data.admin_note}`,
+                room_name: 'Support & Plaintes'
+            });
+            
+            const supportModal = document.getElementById('support-modal');
+            if (supportModal && !supportModal.classList.contains('hidden')) {
+                fetchMyTickets();
+            }
+        });
+
+        socket.on('role_changed', (data) => {
+            alert(`Votre rôle a été mis à jour en: ${data.role}. Le site va se recharger.`);
+            currentUser.role = data.role;
+            localStorage.setItem('prodigy_user', JSON.stringify(currentUser));
+            window.location.reload();
+        });
+
+        socket.on('user_banned', () => {
+            alert("Votre compte a été banni ou supprimé par un administrateur.");
+            localStorage.removeItem('prodigy_token');
+            localStorage.removeItem('prodigy_user');
+            window.location.reload();
         });
     }
 
@@ -962,15 +1033,25 @@ document.addEventListener('DOMContentLoaded', () => {
         div.id = 'msg-' + msg.id;
         div.className = `message message-row ${isSelf ? 'self' : ''}`;
         
+        let deleteBtnHtml = '';
+        if (currentUser && (currentUser.role === 'admin' || msg.sender_id === currentUser.id)) {
+            deleteBtnHtml = `
+                <button class="delete-msg-btn" title="Supprimer le message" style="background: none; border: none; color: var(--error); opacity: 0.6; cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: opacity 0.2s ease;" onclick="window.deleteMessage(${msg.id})">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+            `;
+        }
+
         div.innerHTML = `
             <div class="swipe-indicator-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
             </div>
             <div class="message-avatar">${msg.username.charAt(0).toUpperCase()}</div>
             <div class="message-content">
-                <div class="message-meta">
+                <div class="message-meta" style="display: flex; align-items: center; gap: 0.5rem;">
                     <span class="message-sender">${msg.username}</span>
                     <span class="message-time">${time}</span>
+                    ${deleteBtnHtml}
                 </div>
                 <div class="message-bubble ${isAudio ? 'audio-bubble' : ''} ${isSticker ? 'sticker-bubble' : ''}">${replyBubbleHtml}${displayContent}</div>
             </div>
@@ -1733,4 +1814,472 @@ document.addEventListener('DOMContentLoaded', () => {
             applyTheme(selectedTheme);
         });
     });
+
+    // ==========================================
+    // ============ SUPPORT & ADMIN =============
+    // ==========================================
+
+    window.deleteMessage = async function(msgId) {
+        if (!confirm("Voulez-vous vraiment supprimer ce message ?")) return;
+        try {
+            const res = await fetch(`/api/messages/${msgId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                }
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || "Erreur de suppression");
+            }
+        } catch(e) {
+            alert("Erreur de communication");
+        }
+    };
+
+    // Support Modal Elements
+    const openSupportBtn = document.getElementById('open-support-btn');
+    const closeSupportBtn = document.getElementById('close-support-btn');
+    const supportModal = document.getElementById('support-modal');
+    
+    const supportTabNew = document.getElementById('support-tab-new');
+    const supportTabHistory = document.getElementById('support-tab-history');
+    const supportFormContainer = document.getElementById('support-form-container');
+    const supportHistoryContainer = document.getElementById('support-history-container');
+    const supportForm = document.getElementById('support-form');
+    
+    const supportCategory = document.getElementById('support-category');
+    const supportTitle = document.getElementById('support-title');
+    const supportDescription = document.getElementById('support-description');
+    const myTicketsList = document.getElementById('my-tickets-list');
+    const myTicketsCount = document.getElementById('my-tickets-count');
+
+    // Admin Modal Elements
+    const openAdminBtn = document.getElementById('open-admin-btn');
+    const closeAdminBtn = document.getElementById('close-admin-btn');
+    const adminModal = document.getElementById('admin-modal');
+    
+    const adminTabTickets = document.getElementById('admin-tab-tickets');
+    const adminTabUsers = document.getElementById('admin-tab-users');
+    const adminTabRooms = document.getElementById('admin-tab-rooms');
+    
+    const adminTicketsContainer = document.getElementById('admin-tickets-container');
+    const adminUsersContainer = document.getElementById('admin-users-container');
+    const adminRoomsContainer = document.getElementById('admin-rooms-container');
+    
+    const adminUsersList = document.getElementById('admin-users-list');
+    const adminRoomsList = document.getElementById('admin-rooms-list');
+    const adminTicketsCount = document.getElementById('admin-tickets-count');
+
+    // Support Modal Handlers
+    if (openSupportBtn) {
+        openSupportBtn.addEventListener('click', () => {
+            supportModal.classList.remove('hidden');
+            switchSupportTab('new');
+        });
+    }
+    
+    if (closeSupportBtn) {
+        closeSupportBtn.addEventListener('click', () => {
+            supportModal.classList.add('hidden');
+        });
+    }
+
+    if (supportTabNew) {
+        supportTabNew.addEventListener('click', () => switchSupportTab('new'));
+    }
+    if (supportTabHistory) {
+        supportTabHistory.addEventListener('click', () => {
+            switchSupportTab('history');
+            fetchMyTickets();
+        });
+    }
+
+    function switchSupportTab(tab) {
+        if (!supportTabNew || !supportTabHistory) return;
+        supportTabNew.style.color = tab === 'new' ? 'var(--text-primary)' : 'var(--text-muted)';
+        supportTabNew.style.borderBottom = tab === 'new' ? '2px solid var(--accent)' : 'none';
+        supportTabHistory.style.color = tab === 'history' ? 'var(--text-primary)' : 'var(--text-muted)';
+        supportTabHistory.style.borderBottom = tab === 'history' ? '2px solid var(--accent)' : 'none';
+
+        if (tab === 'new') {
+            supportFormContainer.classList.remove('hidden');
+            supportHistoryContainer.classList.add('hidden');
+        } else {
+            supportFormContainer.classList.add('hidden');
+            supportHistoryContainer.classList.remove('hidden');
+        }
+    }
+
+    if (supportForm) {
+        supportForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const category = supportCategory.value;
+            const title = supportTitle.value.trim();
+            const description = supportDescription.value.trim();
+            
+            try {
+                const res = await fetch('/api/tickets', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                    },
+                    body: JSON.stringify({ category, title, description })
+                });
+                
+                const data = await res.json();
+                if (res.ok) {
+                    showToastNotification({
+                        username: 'Support System',
+                        content: 'Votre plainte a été enregistrée avec succès.',
+                        room_name: 'Support'
+                    });
+                    supportTitle.value = '';
+                    supportDescription.value = '';
+                    switchSupportTab('history');
+                    fetchMyTickets();
+                } else {
+                    alert(data.error || "Erreur de soumission");
+                }
+            } catch(e) {
+                alert("Erreur de connexion");
+            }
+        });
+    }
+
+    async function fetchMyTickets() {
+        if (!myTicketsList || !myTicketsCount) return;
+        try {
+            const res = await fetch('/api/tickets', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                }
+            });
+            const tickets = await res.json();
+            
+            myTicketsCount.textContent = tickets.length;
+            myTicketsList.innerHTML = '';
+            
+            if (tickets.length === 0) {
+                myTicketsList.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 2rem 0;">Aucune plainte soumise pour le moment.</p>`;
+                return;
+            }
+            
+            tickets.forEach(ticket => {
+                const card = document.createElement('div');
+                card.className = 'ticket-card';
+                
+                const formattedDate = new Date(ticket.timestamp).toLocaleString();
+                const badgeClass = ticket.status === 'resolved' ? 'resolved' : 'pending';
+                const statusLabel = ticket.status === 'resolved' ? 'Résolu' : 'En attente';
+                
+                let adminNoteHtml = '';
+                if (ticket.status === 'resolved' && ticket.admin_note) {
+                    adminNoteHtml = `
+                        <div class="ticket-admin-note">
+                            <strong>Réponse du Support:</strong> ${escapeHTML(ticket.admin_note)}
+                        </div>
+                    `;
+                }
+                
+                card.innerHTML = `
+                    <div class="ticket-header">
+                        <span class="ticket-category">${escapeHTML(ticket.category)}</span>
+                        <span class="ticket-badge ${badgeClass}">${statusLabel}</span>
+                    </div>
+                    <div style="font-weight: 600; font-size: 1rem; color: var(--text-primary);">${escapeHTML(ticket.title)}</div>
+                    <div class="ticket-body">${escapeHTML(ticket.description)}</div>
+                    ${adminNoteHtml}
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); text-align: right; margin-top: 0.25rem;">Soumis le ${formattedDate}</div>
+                `;
+                
+                myTicketsList.appendChild(card);
+            });
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    // Admin Modal Handlers
+    if (openAdminBtn) {
+        openAdminBtn.addEventListener('click', () => {
+            adminModal.classList.remove('hidden');
+            switchAdminTab('tickets');
+            fetchAdminTickets();
+        });
+    }
+    
+    if (closeAdminBtn) {
+        closeAdminBtn.addEventListener('click', () => {
+            adminModal.classList.add('hidden');
+        });
+    }
+
+    if (adminTabTickets) {
+        adminTabTickets.addEventListener('click', () => {
+            switchAdminTab('tickets');
+            fetchAdminTickets();
+        });
+    }
+    if (adminTabUsers) {
+        adminTabUsers.addEventListener('click', () => {
+            switchAdminTab('users');
+            fetchAdminUsers();
+        });
+    }
+    if (adminTabRooms) {
+        adminTabRooms.addEventListener('click', () => {
+            switchAdminTab('rooms');
+            fetchAdminRooms();
+        });
+    }
+
+    function switchAdminTab(tab) {
+        if (!adminTabTickets || !adminTabUsers || !adminTabRooms) return;
+        const borderCol = '#f97316';
+        adminTabTickets.style.color = tab === 'tickets' ? 'var(--text-primary)' : 'var(--text-muted)';
+        adminTabTickets.style.borderBottom = tab === 'tickets' ? `2px solid ${borderCol}` : 'none';
+        adminTabUsers.style.color = tab === 'users' ? 'var(--text-primary)' : 'var(--text-muted)';
+        adminTabUsers.style.borderBottom = tab === 'users' ? `2px solid ${borderCol}` : 'none';
+        adminTabRooms.style.color = tab === 'rooms' ? 'var(--text-primary)' : 'var(--text-muted)';
+        adminTabRooms.style.borderBottom = tab === 'rooms' ? `2px solid ${borderCol}` : 'none';
+
+        adminTicketsContainer.classList.add('hidden');
+        adminUsersContainer.classList.add('hidden');
+        adminRoomsContainer.classList.add('hidden');
+
+        if (tab === 'tickets') adminTicketsContainer.classList.remove('hidden');
+        else if (tab === 'users') adminUsersContainer.classList.remove('hidden');
+        else if (tab === 'rooms') adminRoomsContainer.classList.remove('hidden');
+    }
+
+    async function fetchAdminTickets() {
+        if (!adminTicketsContainer || !adminTicketsCount) return;
+        try {
+            const res = await fetch('/api/tickets', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                }
+            });
+            const tickets = await res.json();
+            adminTicketsCount.textContent = tickets.length;
+            adminTicketsContainer.innerHTML = '';
+            
+            if (tickets.length === 0) {
+                adminTicketsContainer.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 3rem 0;">Aucune plainte reçue.</p>`;
+                return;
+            }
+            
+            tickets.forEach(ticket => {
+                const card = document.createElement('div');
+                card.className = 'ticket-card';
+                
+                const formattedDate = new Date(ticket.timestamp).toLocaleString();
+                const badgeClass = ticket.status === 'resolved' ? 'resolved' : 'pending';
+                const statusLabel = ticket.status === 'resolved' ? 'Résolu' : 'En attente';
+                
+                let resolveFormHtml = '';
+                if (ticket.status !== 'resolved') {
+                    resolveFormHtml = `
+                        <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">Répondre & Résoudre</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" id="admin-note-${ticket.id}" placeholder="Note d'assistance ou résolution..." style="flex: 1; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-base); color: var(--text-primary); font-size: 0.88rem;">
+                                <button onclick="window.resolveTicket(${ticket.id})" class="admin-action-btn-primary" style="padding: 0.5rem 1rem;">Résoudre</button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resolveFormHtml = `
+                        <div class="ticket-admin-note">
+                            <strong>Votre réponse:</strong> ${escapeHTML(ticket.admin_note || '')}
+                        </div>
+                    `;
+                }
+                
+                card.innerHTML = `
+                    <div class="ticket-header">
+                        <span class="ticket-category">${escapeHTML(ticket.category)} - Par <strong>${escapeHTML(ticket.username || 'Inconnu')}</strong></span>
+                        <span class="ticket-badge ${badgeClass}">${statusLabel}</span>
+                    </div>
+                    <div style="font-weight: 600; font-size: 1rem; color: var(--text-primary);">${escapeHTML(ticket.title)}</div>
+                    <div class="ticket-body">${escapeHTML(ticket.description)}</div>
+                    ${resolveFormHtml}
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); text-align: right; margin-top: 0.25rem;">Soumis le ${formattedDate}</div>
+                `;
+                
+                adminTicketsContainer.appendChild(card);
+            });
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    window.resolveTicket = async function(ticketId) {
+        const noteInput = document.getElementById(`admin-note-${ticketId}`);
+        const adminNote = noteInput ? noteInput.value.trim() : '';
+        if (!adminNote) {
+            alert("Veuillez saisir une note de résolution.");
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/tickets/${ticketId}/resolve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                },
+                body: JSON.stringify({ admin_note: adminNote })
+            });
+            if (res.ok) {
+                fetchAdminTickets();
+            } else {
+                alert("Erreur de mise à jour");
+            }
+        } catch(e) {
+            alert("Erreur serveur");
+        }
+    };
+
+    async function fetchAdminUsers() {
+        if (!adminUsersList) return;
+        try {
+            const res = await fetch('/api/admin/users', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                }
+            });
+            const users = await res.json();
+            
+            adminUsersList.innerHTML = '';
+            users.forEach(u => {
+                const tr = document.createElement('tr');
+                const isMe = u.id === currentUser.id;
+                const statusDot = u.status === 'online' ? 'online' : '';
+                const roleBadge = u.role === 'admin' ? `<span style="background: rgba(249, 115, 22, 0.15); color: #f97316; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">ADMIN</span>` : `<span style="background: rgba(255,255,255,0.05); color: var(--text-secondary); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">MEMBRE</span>`;
+                
+                let actionsHtml = '-';
+                if (!isMe) {
+                    const nextRole = u.role === 'admin' ? 'user' : 'admin';
+                    const nextRoleLabel = u.role === 'admin' ? 'Rétrograder' : 'Promouvoir Admin';
+                    actionsHtml = `
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                            <button onclick="window.changeUserRole(${u.id}, '${nextRole}')" class="admin-action-btn-primary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">${nextRoleLabel}</button>
+                            <button onclick="window.deleteUserAccount(${u.id})" class="admin-action-btn-danger" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Bannir</button>
+                        </div>
+                    `;
+                }
+                
+                tr.innerHTML = `
+                    <td style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="status-dot ${statusDot}"></span>
+                        <strong>${escapeHTML(u.username)}</strong>
+                    </td>
+                    <td style="padding: 0.75rem 1rem;">${roleBadge}</td>
+                    <td style="padding: 0.75rem 1rem; text-transform: capitalize; font-size: 0.8rem; color: var(--text-secondary);">${u.status}</td>
+                    <td style="padding: 0.75rem 1rem; text-align: right;">${actionsHtml}</td>
+                `;
+                adminUsersList.appendChild(tr);
+            });
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    window.changeUserRole = async function(userId, newRole) {
+        if (!confirm(`Voulez-vous vraiment changer le rôle de cet utilisateur en ${newRole} ?`)) return;
+        try {
+            const res = await fetch(`/api/admin/users/${userId}/role`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                },
+                body: JSON.stringify({ role: newRole })
+            });
+            if (res.ok) {
+                fetchAdminUsers();
+            } else {
+                const d = await res.json();
+                alert(d.error || "Erreur lors du changement de rôle");
+            }
+        } catch(e) {
+            alert("Erreur serveur");
+        }
+    };
+
+    window.deleteUserAccount = async function(userId) {
+        if (!confirm("ATTENTION ! Cela va définitivement supprimer cet utilisateur, ses messages et tous ses tickets. Continuer ?")) return;
+        try {
+            const res = await fetch(`/api/admin/users/${userId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                }
+            });
+            if (res.ok) {
+                fetchAdminUsers();
+            } else {
+                const d = await res.json();
+                alert(d.error || "Erreur de suppression");
+            }
+        } catch(e) {
+            alert("Erreur serveur");
+        }
+    };
+
+    async function fetchAdminRooms() {
+        if (!adminRoomsList) return;
+        try {
+            const res = await fetch('/api/rooms', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                }
+            });
+            const rooms = await res.json();
+            
+            adminRoomsList.innerHTML = '';
+            rooms.forEach(r => {
+                const tr = document.createElement('tr');
+                const isGeneral = r.id === 1;
+                const isLockedLabel = r.is_locked === 1 ? `<span style="color: #ef4444; font-weight: 600;">🔒 Privé</span>` : `<span style="color: #10b981; font-weight: 600;">🌐 Public</span>`;
+                
+                let actionHtml = '-';
+                if (!isGeneral) {
+                    actionHtml = `<button onclick="window.deleteRoom(${r.id})" class="admin-action-btn-danger" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Supprimer</button>`;
+                }
+                
+                tr.innerHTML = `
+                    <td style="padding: 0.75rem 1rem;"><strong># ${escapeHTML(r.name)}</strong></td>
+                    <td style="padding: 0.75rem 1rem;">${isLockedLabel}</td>
+                    <td style="padding: 0.75rem 1rem; text-align: right;">${actionHtml}</td>
+                `;
+                adminRoomsList.appendChild(tr);
+            });
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    window.deleteRoom = async function(roomId) {
+        if (!confirm("Voulez-vous vraiment supprimer définitivement ce canal ainsi que TOUS ses messages ?")) return;
+        try {
+            const res = await fetch(`/api/rooms/${roomId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                }
+            });
+            if (res.ok) {
+                fetchAdminRooms();
+            } else {
+                const d = await res.json();
+                alert(d.error || "Erreur lors de la suppression");
+            }
+        } catch(e) {
+            alert("Erreur serveur");
+        }
+    };
 });

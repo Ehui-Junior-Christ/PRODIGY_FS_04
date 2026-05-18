@@ -73,7 +73,17 @@
                 </div>
             </div>
 
-            <div class="sidebar-footer">
+            <div class="sidebar-footer" style="padding: 1rem 0.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
+                    <button class="sidebar-action-btn" id="open-support-btn" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.6rem; border-radius: 8px; background: var(--bg-base); border: 1px solid var(--border); color: var(--text-primary); font-size: 0.82rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        Support & Plaintes
+                    </button>
+                    <button class="sidebar-action-btn hidden" id="open-admin-btn" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.6rem; border-radius: 8px; background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.3); color: #f97316; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        Console Admin
+                    </button>
+                </div>
                 <div class="theme-switcher">
                     <span class="theme-switcher-title">Thème</span>
                     <div class="theme-buttons">
@@ -183,6 +193,120 @@
             <div class="modal-actions">
                 <button id="cancel-invite-btn" class="btn-secondary">Annuler</button>
                 <button id="confirm-invite-btn" class="btn-primary" style="width: auto; padding: 0.75rem 1.5rem;">Inviter</button>
+            </div>
+        </div>
+    </div>
+ 
+    <!-- Modal Support & Plaintes -->
+    <div id="support-modal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 600px; width: 90%;">
+            <h3 class="modal-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Support & Plaintes</span>
+                <button id="close-support-btn" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; padding: 0;">&times;</button>
+            </h3>
+            
+            <!-- Tabs inside support -->
+            <div style="display: flex; border-bottom: 1px solid var(--border); margin: 1rem 0; gap: 1rem;">
+                <button id="support-tab-new" style="background: none; border: none; color: var(--text-primary); font-weight: 600; padding: 0.5rem 0; border-bottom: 2px solid var(--accent); cursor: pointer;">Nouvelle Plainte</button>
+                <button id="support-tab-history" style="background: none; border: none; color: var(--text-muted); font-weight: 500; padding: 0.5rem 0; cursor: pointer;">Mes Plaintes (<span id="my-tickets-count">0</span>)</button>
+            </div>
+            
+            <!-- Tab 1: New Ticket Form -->
+            <div id="support-form-container">
+                <form id="support-form" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="input-group">
+                        <label for="support-category">Catégorie</label>
+                        <select id="support-category" style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-base); color: var(--text-primary); font-size: 0.9rem;">
+                            <option value="Technique">Problème Technique</option>
+                            <option value="Signalement">Signalement Utilisateur</option>
+                            <option value="Suggestion">Suggestion d'Amélioration</option>
+                            <option value="Autre">Autre</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="support-title">Sujet</label>
+                        <input type="text" id="support-title" placeholder="ex: Bug sur l'envoi de stickers" autocomplete="off" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="support-description">Description détaillée</label>
+                        <textarea id="support-description" placeholder="Veuillez décrire votre problème ou plainte de manière très précise..." style="width: 100%; min-height: 120px; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-base); color: var(--text-primary); font-family: inherit; font-size: 0.9rem; resize: vertical;" required></textarea>
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%; padding: 0.8rem; margin-top: 0.5rem;">Soumettre la plainte</button>
+                </form>
+            </div>
+            
+            <!-- Tab 2: Tickets History -->
+            <div id="support-history-container" class="hidden" style="max-height: 350px; overflow-y: auto;">
+                <div id="my-tickets-list" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- Tickets dynamically loaded -->
+                    <p style="text-align: center; color: var(--text-muted); padding: 2rem 0;">Aucune plainte soumise pour le moment.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Console Admin -->
+    <div id="admin-modal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 800px; width: 95%; height: 80vh; display: flex; flex-direction: column;">
+            <h3 class="modal-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-shrink: 0;">
+                <span style="display: flex; align-items: center; gap: 0.5rem; color: #f97316;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    Console d'Administration
+                </span>
+                <button id="close-admin-btn" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; padding: 0;">&times;</button>
+            </h3>
+            
+            <!-- Tabs inside Admin Console -->
+            <div style="display: flex; border-bottom: 1px solid var(--border); gap: 1.5rem; flex-shrink: 0; margin-bottom: 1rem;">
+                <button id="admin-tab-tickets" style="background: none; border: none; color: var(--text-primary); font-weight: 600; padding: 0.5rem 0; border-bottom: 2px solid #f97316; cursor: pointer;">Plaintes Reçues (<span id="admin-tickets-count">0</span>)</button>
+                <button id="admin-tab-users" style="background: none; border: none; color: var(--text-muted); font-weight: 500; padding: 0.5rem 0; cursor: pointer;">Membres & Rôles</button>
+                <button id="admin-tab-rooms" style="background: none; border: none; color: var(--text-muted); font-weight: 500; padding: 0.5rem 0; cursor: pointer;">Gestion des Canaux</button>
+            </div>
+            
+            <!-- Tab Contents Wrapper -->
+            <div style="flex: 1; overflow-y: auto; padding-right: 0.25rem;">
+                <!-- Tab 1: Tickets List -->
+                <div id="admin-tickets-container" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- Loaded dynamically -->
+                    <p style="text-align: center; color: var(--text-muted); padding: 3rem 0;">Aucune plainte en attente.</p>
+                </div>
+                
+                <!-- Tab 2: Users List -->
+                <div id="admin-users-container" class="hidden">
+                    <div style="overflow-x: auto; width: 100%;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; font-weight: 600;">
+                                    <th style="padding: 0.75rem 1rem;">Utilisateur</th>
+                                    <th style="padding: 0.75rem 1rem;">Rôle Actuel</th>
+                                    <th style="padding: 0.75rem 1rem;">Statut</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-list">
+                                <!-- Dynamically loaded -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Tab 3: Rooms List -->
+                <div id="admin-rooms-container" class="hidden">
+                    <div style="overflow-x: auto; width: 100%;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; font-weight: 600;">
+                                    <th style="padding: 0.75rem 1rem;">Canal</th>
+                                    <th style="padding: 0.75rem 1rem;">Confidentialité</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-rooms-list">
+                                <!-- Dynamically loaded -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

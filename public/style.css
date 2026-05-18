@@ -1500,5 +1500,150 @@ body.theme-orange {
     box-shadow: 0 0 8px var(--theme-accent-muted);
 }
 
+/* Support & Admin Specific Styles */
+#support-modal select, #support-modal textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-family: inherit;
+    font-size: 0.9rem;
+    transition: border-color 0.2s ease;
+}
+
+#support-modal select:focus, #support-modal textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.ticket-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.ticket-card:hover {
+    border-color: var(--text-secondary);
+}
+
+.ticket-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 0.5rem;
+}
+
+.ticket-badge {
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.ticket-badge.pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.ticket-badge.resolved {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.ticket-category {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--bg-base);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.ticket-body {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    line-height: 1.45;
+}
+
+.ticket-admin-note {
+    background: rgba(255, 255, 255, 0.05);
+    border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+/* Admin Dashboard Table Styles */
+#admin-modal table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#admin-modal th {
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+#admin-modal td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+#admin-modal tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-action-btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.admin-action-btn-danger:hover {
+    background: #ef4444;
+    color: #ffffff;
+}
+
+.admin-action-btn-primary {
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+    border: 1px solid rgba(249, 115, 22, 0.2);
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.admin-action-btn-primary:hover {
+    background: #f97316;
+    color: #ffffff;
+}
+
 
 
