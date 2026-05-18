@@ -419,6 +419,13 @@ io.on('connection', async (socket) => {
         }
 
         try {
+            const roomRes = await db.execute({
+                sql: `SELECT is_locked, creator_id FROM rooms WHERE id = ?`,
+                args: [roomId]
+            });
+            const room = roomRes.rows[0];
+            if (!room) return;
+
             const standardTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
             const result = await db.execute({
                 sql: `INSERT INTO messages (room_id, sender_id, content, timestamp, reply_to_id) VALUES (?, ?, ?, ?, ?)`,
@@ -437,7 +444,28 @@ io.on('connection', async (socket) => {
                 reply_content: replyContent
             };
             
-            io.emit('new_message', messageData);
+            if (room.is_locked === 1) {
+                // Pour un canal verrouillé, récupérer les membres autorisés
+                const membersRes = await db.execute({
+                    sql: `SELECT user_id FROM room_members WHERE room_id = ?`,
+                    args: [roomId]
+                });
+                const memberIds = new Set(membersRes.rows.map(row => Number(row.user_id)));
+                if (room.creator_id) {
+                    memberIds.add(Number(room.creator_id));
+                }
+                
+                // Envoyer uniquement aux sockets des membres autorisés
+                const sockets = await io.fetchSockets();
+                for (const s of sockets) {
+                    if (s.user && memberIds.has(Number(s.user.id))) {
+                        s.emit('new_message', messageData);
+                    }
+                }
+            } else {
+                // Pour un canal public, diffusion globale
+                io.emit('new_message', messageData);
+            }
         } catch (e) {
             console.error(e);
         }
