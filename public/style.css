@@ -931,3 +931,110 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* Sticker Popover & Bubble Styles */
+.sticker-popover {
+    position: absolute;
+    bottom: calc(100% + 15px);
+    right: 2rem;
+    width: 320px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.3s var(--transition-spring) forwards;
+    backdrop-filter: blur(8px);
+}
+
+.sticker-popover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.sticker-popover-title {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sticker-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-base);
+}
+
+.sticker-tab {
+    flex: 1;
+    padding: 0.6rem 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border: none;
+    background: transparent;
+    transition: all 0.2s ease;
+}
+
+.sticker-tab.active {
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border-bottom: 2px solid var(--text-primary);
+}
+
+.sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 1rem;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.sticker-item {
+    cursor: pointer;
+    transition: transform 0.2s var(--transition-spring), background 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border-radius: 12px;
+}
+
+.sticker-item:hover {
+    transform: scale(1.2);
+    background: var(--bg-surface-hover);
+}
+
+.sticker-item img {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.message-bubble.sticker-bubble {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
+
+.chat-sticker {
+    max-width: 140px;
+    max-height: 140px;
+    width: auto;
+    height: auto;
+    display: block;
+    user-select: none;
+    pointer-events: none;
+    animation: scaleIn 0.3s var(--transition-spring) forwards;
+}
+

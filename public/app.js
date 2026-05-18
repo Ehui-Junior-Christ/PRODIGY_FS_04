@@ -757,9 +757,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let displayContent = escapeHTML(msg.content);
         let isAudio = false;
+        let isSticker = false;
         
-        // Check if message is a file or audio
-        if (msg.content && msg.content.startsWith('[FILE]:')) {
+        // Check if message is a file, audio or sticker
+        if (msg.content && msg.content.startsWith('[STICKER]:')) {
+            isSticker = true;
+            const stickerUrl = msg.content.substring(10);
+            displayContent = `<img src="${stickerUrl}" class="chat-sticker" alt="Sticker" referrerpolicy="no-referrer">`;
+        } else if (msg.content && msg.content.startsWith('[FILE]:')) {
             try {
                 const parts = msg.content.substring(7).split('|');
                 const fileName = parts[0];
@@ -822,7 +827,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             // We need to wait for the element to be inserted into the DOM
                             setTimeout(() => {
                                 const audioEl = document.getElementById(audioId);
-                                if (audioEl) audioEl.src = blobUrl;
+                                  if (audioEl) audioEl.src = blobUrl;
                             }, 50);
                         })
                         .catch(err => console.error('Blob fetch failed:', err));
@@ -851,7 +856,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="message-sender">${msg.username}</span>
                     <span class="message-time">${time}</span>
                 </div>
-                <div class="message-bubble ${isAudio ? 'audio-bubble' : ''}">${displayContent}</div>
+                <div class="message-bubble ${isAudio ? 'audio-bubble' : ''} ${isSticker ? 'sticker-bubble' : ''}">${displayContent}</div>
+            </div>
+        `;
             </div>
         `;
         
@@ -1120,4 +1127,120 @@ document.addEventListener('DOMContentLoaded', () => {
             timeDisplay.textContent = displayTime;
         }
     };
+
+    // ========== PREMIUM STICKER SYSTEM ==========
+    const stickerPacks = {
+        reactions: [
+            { name: 'Heart', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Heart/3D/heart_3d.png' },
+            { name: 'Fire', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Fire/3D/fire_3d.png' },
+            { name: 'Tears of Joy', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Tears%20of%20joy/3D/tears_of_joy_3d.png' },
+            { name: 'Cool', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Smiling%20face%20with%20sunglasses/3D/smiling_face_with_sunglasses_3d.png' },
+            { name: 'Rocket', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Rocket/3D/rocket_3d.png' },
+            { name: 'Party Popper', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Party%20popper/3D/party_popper_3d.png' },
+            { name: 'Sparkles', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Sparkles/3D/sparkles_3d.png' },
+            { name: 'Clapping', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Clapping%20hands/3D/clapping_hands_3d.png' }
+        ],
+        animals: [
+            { name: 'Cute Cat', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Cat%20face/3D/cat_face_3d.png' },
+            { name: 'Cute Dog', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Dog%20face/3D/dog_face_3d.png' },
+            { name: 'Panda', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Panda/3D/panda_3d.png' },
+            { name: 'Unicorn', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Unicorn/3D/unicorn_3d.png' },
+            { name: 'Monkey', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Hear-no-evil%20monkey/3D/hear-no-evil_monkey_3d.png' },
+            { name: 'Lion', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Lion/3D/lion_3d.png' },
+            { name: 'Fox', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Fox/3D/fox_3d.png' },
+            { name: 'Chicken', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Baby%20chick/3D/baby_chick_3d.png' }
+        ],
+        geek: [
+            { name: 'Robot', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Robot/3D/robot_3d.png' },
+            { name: 'Alien', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Alien/3D/alien_3d.png' },
+            { name: 'Ghost', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Ghost/3D/ghost_3d.png' },
+            { name: 'Thinking', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Thinking%20face/3D/thinking_face_3d.png' },
+            { name: 'Money Mouth', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Money-mouth%20face/3D/money-mouth_face_3d.png' },
+            { name: 'Exploding Head', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Exploding%20head/3D/exploding_head_3d.png' },
+            { name: 'OK Hand', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/OK%20hand/3D/ok_hand_3d.png' },
+            { name: '100 Points', url: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Hundred%20points/3D/hundred_points_3d.png' }
+        ]
+    };
+
+    let activeStickerTab = 'reactions';
+
+    const stickerBtn = document.getElementById('sticker-btn');
+    const stickerPopover = document.getElementById('sticker-popover');
+
+    if (stickerBtn && stickerPopover) {
+        stickerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (stickerPopover.style.display === 'flex') {
+                stickerPopover.style.display = 'none';
+            } else {
+                renderStickerPopover();
+                stickerPopover.style.display = 'flex';
+                // Close other popovers/dropdowns
+                hideMentionDropdown();
+            }
+        });
+
+        // Hide when clicking outside
+        document.addEventListener('click', (e) => {
+            if (stickerPopover.style.display === 'flex' && !stickerPopover.contains(e.target) && e.target !== stickerBtn) {
+                stickerPopover.style.display = 'none';
+            }
+        });
+    }
+
+    function renderStickerPopover() {
+        if (!stickerPopover) return;
+        
+        stickerPopover.innerHTML = `
+            <div class="sticker-popover-header">
+                <span class="sticker-popover-title">Bibliothèque de Stickers</span>
+            </div>
+            <div class="sticker-tabs">
+                <button class="sticker-tab ${activeStickerTab === 'reactions' ? 'active' : ''}" data-tab="reactions">🔥 Réactions</button>
+                <button class="sticker-tab ${activeStickerTab === 'animals' ? 'active' : ''}" data-tab="animals">🦄 Animaux</button>
+                <button class="sticker-tab ${activeStickerTab === 'geek' ? 'active' : ''}" data-tab="geek">👾 Geek & Fun</button>
+            </div>
+            <div class="sticker-grid" id="sticker-grid"></div>
+        `;
+
+        // Add tab listeners
+        const tabs = stickerPopover.querySelectorAll('.sticker-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                activeStickerTab = tab.dataset.tab;
+                renderStickerPopover();
+            });
+        });
+
+        // Render grid items
+        const grid = stickerPopover.querySelector('#sticker-grid');
+        if (grid) {
+            const currentPack = stickerPacks[activeStickerTab] || [];
+            currentPack.forEach(sticker => {
+                const item = document.createElement('div');
+                item.className = 'sticker-item';
+                item.title = sticker.name;
+                item.innerHTML = `<img src="${sticker.url}" alt="${sticker.name}" loading="lazy" referrerpolicy="no-referrer">`;
+                
+                item.addEventListener('click', () => {
+                    sendSticker(sticker.url);
+                });
+                
+                grid.appendChild(item);
+            });
+        }
+    }
+
+    function sendSticker(stickerUrl) {
+        if (!socket || !currentRoomId) return;
+        
+        socket.emit('send_message', {
+            roomId: currentRoomId,
+            content: `[STICKER]:${stickerUrl}`
+        });
+
+        if (stickerPopover) {
+            stickerPopover.style.display = 'none';
+        }
+    }
 });
