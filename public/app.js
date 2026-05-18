@@ -43,7 +43,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const recordingTimer = document.getElementById('recording-timer');
     const recordingTimeDisplay = document.getElementById('recording-time');
 
+    // DOM Elements for Reply
+    const replyPreviewContainer = document.getElementById('reply-preview-container');
+    const replyPreviewUsername = document.getElementById('reply-preview-username');
+    const replyPreviewText = document.getElementById('reply-preview-text');
+    const replyPreviewCloseBtn = document.getElementById('reply-preview-close-btn');
+
     // State
+    let replyingToMessageId = null;
     let currentTab = 'login';
     let socket = null;
     let currentUser = null;
@@ -423,10 +430,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.emit('send_message', {
             roomId: currentRoomId,
-            content: content
+            content: content,
+            replyToId: replyingToMessageId
         });
 
         messageInput.value = '';
+        cancelReply();
     });
 
     attachBtn.addEventListener('click', () => {
@@ -762,6 +771,43 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Reply System Helpers
+    window.replyToMessage = function(msgId, sender, rawContent) {
+        replyingToMessageId = msgId;
+        
+        let textExcerpt = rawContent;
+        if (rawContent.startsWith('[FILE]:')) {
+            textExcerpt = '📄 Fichier joint';
+        } else if (rawContent.startsWith('[AUDIO]:')) {
+            textExcerpt = '🎤 Message vocal';
+        } else if (rawContent.startsWith('[STICKER]:')) {
+            textExcerpt = '🖼️ Sticker';
+        }
+        
+        // Truncate if long
+        if (textExcerpt.length > 60) {
+            textExcerpt = textExcerpt.substring(0, 60) + '...';
+        }
+        
+        replyPreviewUsername.textContent = sender;
+        replyPreviewText.textContent = textExcerpt;
+        replyPreviewContainer.classList.remove('hidden');
+        
+        // Focus the message input automatically
+        messageInput.focus();
+    };
+
+    window.cancelReply = function() {
+        replyingToMessageId = null;
+        replyPreviewContainer.classList.add('hidden');
+    };
+
+    if (replyPreviewCloseBtn) {
+        replyPreviewCloseBtn.addEventListener('click', () => {
+            window.cancelReply();
+        });
+    }
+
     function appendMessage(msg) {
         const isSelf = msg.sender_id === currentUser.id;
         const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -862,22 +908,122 @@ document.addEventListener('DOMContentLoaded', () => {
                 return `<span style="color: var(--success); font-weight: bold;">${match}</span>`;
             });
         }
-        
+        let replyBubbleHtml = '';
+        if (msg.reply_to_id) {
+            let excerpt = msg.reply_content || '';
+            if (excerpt.startsWith('[FILE]:')) excerpt = '📄 Fichier joint';
+            else if (excerpt.startsWith('[AUDIO]:')) excerpt = '🎤 Message vocal';
+            else if (excerpt.startsWith('[STICKER]:')) excerpt = '🖼️ Sticker';
+            
+            if (excerpt.length > 50) excerpt = excerpt.substring(0, 50) + '...';
+            
+            replyBubbleHtml = `
+                <div class="message-reply-bubble" data-reply-target="${msg.reply_to_id}">
+                    <span class="message-reply-username">${escapeHTML(msg.reply_username || 'Utilisateur')}</span>
+                    <p class="message-reply-text">${escapeHTML(excerpt)}</p>
+                </div>
+            `;
+        }
+
         const div = document.createElement('div');
-        div.className = `message ${isSelf ? 'self' : ''}`;
+        div.id = 'msg-' + msg.id;
+        div.className = `message message-row ${isSelf ? 'self' : ''}`;
         
         div.innerHTML = `
+            <div class="swipe-indicator-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+            </div>
             <div class="message-avatar">${msg.username.charAt(0).toUpperCase()}</div>
             <div class="message-content">
                 <div class="message-meta">
                     <span class="message-sender">${msg.username}</span>
                     <span class="message-time">${time}</span>
                 </div>
-                <div class="message-bubble ${isAudio ? 'audio-bubble' : ''} ${isSticker ? 'sticker-bubble' : ''}">${displayContent}</div>
+                <div class="message-bubble ${isAudio ? 'audio-bubble' : ''} ${isSticker ? 'sticker-bubble' : ''}">
+                    ${replyBubbleHtml}
+                    ${displayContent}
+                </div>
             </div>
+            <button class="reply-hover-btn" title="Répondre">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+            </button>
         `;
         
         messagesContainer.appendChild(div);
+
+        // Click bubble scroll listener
+        const replyBubble = div.querySelector('.message-reply-bubble');
+        if (replyBubble) {
+            replyBubble.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const targetId = replyBubble.dataset.replyTarget;
+                const targetEl = document.getElementById('msg-' + targetId);
+                if (targetEl) {
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    targetEl.classList.add('message-highlight-flash');
+                    setTimeout(() => {
+                        targetEl.classList.remove('message-highlight-flash');
+                    }, 1200);
+                }
+            });
+        }
+
+        // Desktop Reply Hover btn click
+        const hoverBtn = div.querySelector('.reply-hover-btn');
+        if (hoverBtn) {
+            hoverBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.replyToMessage(msg.id, msg.username, msg.content);
+            });
+        }
+
+        // Mobile Swipe To Reply Touch Gestures
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isSwiping = false;
+        let swipeDiff = 0;
+
+        div.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            isSwiping = false;
+            swipeDiff = 0;
+            div.style.transition = '';
+        }, { passive: true });
+
+        div.addEventListener('touchmove', (e) => {
+            const diffX = e.touches[0].clientX - touchStartX;
+            const diffY = e.touches[0].clientY - touchStartY;
+            
+            // Only swipe to the right, and block swipe if vertical scroll is dominant
+            if (diffX > 0 && Math.abs(diffY) < 30) {
+                isSwiping = true;
+                swipeDiff = Math.min(diffX, 70);
+                div.style.transform = `translateX(${swipeDiff}px)`;
+                
+                if (swipeDiff > 45) {
+                    div.classList.add('swiping-active');
+                } else {
+                    div.classList.remove('swiping-active');
+                }
+                
+                if (e.cancelable) e.preventDefault();
+            }
+        }, { passive: false });
+
+        div.addEventListener('touchend', (e) => {
+            div.classList.remove('swiping-active');
+            div.style.transition = 'transform 0.25s cubic-bezier(0.1, 0.8, 0.2, 1)';
+            div.style.transform = 'translateX(0px)';
+            
+            if (isSwiping && swipeDiff > 45) {
+                window.replyToMessage(msg.id, msg.username, msg.content);
+            }
+            
+            setTimeout(() => {
+                div.style.transition = '';
+            }, 250);
+        });
 
         // Attacher des écouteurs sur les médias pour forcer le défilement complet dès qu'ils finissent de charger !
         const mediaElements = div.querySelectorAll('img, video');

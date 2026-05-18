@@ -107,6 +107,14 @@
             </div>
 
             <footer class="chat-input-area">
+                <div id="reply-preview-container" class="reply-preview-container hidden">
+                    <div class="reply-preview-accent"></div>
+                    <div class="reply-preview-body">
+                        <span class="reply-preview-username" id="reply-preview-username">Répondre à ...</span>
+                        <p class="reply-preview-text" id="reply-preview-text">Extrait du message</p>
+                    </div>
+                    <button type="button" class="reply-preview-close" id="reply-preview-close-btn" title="Annuler la réponse">×</button>
+                </div>
                 <div id="mention-dropdown" class="mention-dropdown"></div>
                 <div id="sticker-popover" class="sticker-popover"></div>
                 <form id="message-form">

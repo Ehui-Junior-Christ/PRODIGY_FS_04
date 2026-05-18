@@ -59,6 +59,7 @@ async function initDb() {
         
         try { await db.execute(`ALTER TABLE rooms ADD COLUMN creator_id INTEGER`); } catch(e){}
         try { await db.execute(`ALTER TABLE rooms ADD COLUMN is_locked INTEGER DEFAULT 0`); } catch(e){}
+        try { await db.execute(`ALTER TABLE messages ADD COLUMN reply_to_id INTEGER`); } catch(e){}
 
         await db.execute(`CREATE TABLE IF NOT EXISTS room_members (
             room_id INTEGER,
@@ -68,28 +69,59 @@ async function initDb() {
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
 
-        // Nettoyage périodique automatique des fichiers physiques obsolètes sur disque (plus de 30 jours) pour préserver le stockage
+        // Nettoyage périodique automatique toutes les 10 minutes des messages et fichiers vieux de plus de 24 heures (GMT / Côte d'Ivoire)
         setInterval(async () => {
             try {
-                const fs = require('fs');
-                const uploadsDir = path.join(__dirname, 'public', 'uploads');
-                if (fs.existsSync(uploadsDir)) {
-                    const files = fs.readdirSync(uploadsDir);
-                    const now = Date.now();
-                    const thirtyDays = 30 * 24 * 60 * 60 * 1000; // Les fichiers d'upload sont conservés pendant 30 jours
-                    files.forEach(file => {
-                        const filePath = path.join(uploadsDir, file);
-                        const stat = fs.statSync(filePath);
-                        if (now - stat.mtimeMs > thirtyDays) {
-                            fs.unlinkSync(filePath);
-                            console.log(`[Nettoyage Fichiers] Fichier expiré supprimé (>30 jours) : ${file}`);
-                        }
-                    });
+                const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                
+                // 1. Récupérer les messages qui vont être supprimés pour repérer leurs fichiers physiques
+                const filesToClean = await db.execute({
+                    sql: `SELECT content FROM messages WHERE timestamp < ?`,
+                    args: [twentyFourHoursAgo]
+                });
+                
+                // 2. Supprimer les messages de la base de données
+                const res = await db.execute({
+                    sql: `DELETE FROM messages WHERE timestamp < ?`,
+                    args: [twentyFourHoursAgo]
+                });
+                
+                if (res.rowsAffected > 0) {
+                    console.log(`[Nettoyage 24h] ${res.rowsAffected} message(s) supprimé(s).`);
+                    io.emit('messages_cleaned');
                 }
+                
+                // 3. Supprimer les fichiers physiques associés du disque dur
+                const fs = require('fs');
+                filesToClean.rows.forEach(row => {
+                    const content = row.content;
+                    if (content && (content.startsWith('[FILE]:') || content.startsWith('[AUDIO]:') || content.startsWith('[STICKER]:'))) {
+                        const isSticker = content.startsWith('[STICKER]:');
+                        const prefix = isSticker ? '[STICKER]:' : (content.startsWith('[FILE]:') ? '[FILE]:' : '[AUDIO]:');
+                        let relativeUrl = '';
+                        if (isSticker) {
+                            relativeUrl = content.substring(prefix.length);
+                        } else {
+                            const parts = content.substring(prefix.length).split('|');
+                            relativeUrl = parts[parts.length - 1];
+                        }
+                        
+                        if (relativeUrl && relativeUrl.startsWith('/uploads/')) {
+                            const fileName = relativeUrl.substring(9);
+                            const filePath = path.join(__dirname, 'public', 'uploads', fileName);
+                            if (fs.existsSync(filePath)) {
+                                try {
+                                    fs.unlinkSync(filePath);
+                                    console.log(`[Nettoyage Fichiers] Fichier expiré supprimé (>24h Côte d'Ivoire) : ${fileName}`);
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                });
             } catch(e) {
-                console.error("Erreur lors du nettoyage des fichiers :", e);
+                console.error("Erreur lors du nettoyage périodique :", e);
             }
-        }, 30 * 60 * 1000); // Exécuté toutes les 30 minutes
+        }, 10 * 60 * 1000);
 
         // S'assurer du répertoire d'uploads
         const fs = require('fs');
@@ -361,10 +393,31 @@ io.on('connection', async (socket) => {
             }
         }
 
+        let replyToId = data.replyToId || null;
+        let replyUsername = null;
+        let replyContent = null;
+        
+        if (replyToId) {
+            try {
+                const repRes = await db.execute({
+                    sql: `SELECT m.content, u.username FROM messages m JOIN users u ON m.sender_id = u.id WHERE m.id = ?`,
+                    args: [replyToId]
+                });
+                if (repRes.rows.length > 0) {
+                    replyUsername = repRes.rows[0].username;
+                    replyContent = repRes.rows[0].content;
+                } else {
+                    replyToId = null;
+                }
+            } catch(e) {
+                replyToId = null;
+            }
+        }
+
         try {
             const result = await db.execute({
-                sql: `INSERT INTO messages (room_id, sender_id, content) VALUES (?, ?, ?)`,
-                args: [roomId, userId, content]
+                sql: `INSERT INTO messages (room_id, sender_id, content, timestamp, reply_to_id) VALUES (?, ?, ?, ?, ?)`,
+                args: [roomId, userId, content, new Date().toISOString(), replyToId]
             });
             
             const messageData = {
@@ -373,7 +426,10 @@ io.on('connection', async (socket) => {
                 sender_id: userId,
                 content,
                 timestamp: new Date().toISOString(),
-                username: socket.user.username
+                username: socket.user.username,
+                reply_to_id: replyToId,
+                reply_username: replyUsername,
+                reply_content: replyContent
             };
             
             io.emit('new_message', messageData);
@@ -421,9 +477,13 @@ io.on('connection', async (socket) => {
         try {
             const result = await db.execute({
                 sql: `
-                    SELECT m.*, u.username 
+                    SELECT m.*, u.username,
+                           rm.content AS reply_content,
+                           ru.username AS reply_username
                     FROM messages m 
                     JOIN users u ON m.sender_id = u.id 
+                    LEFT JOIN messages rm ON m.reply_to_id = rm.id
+                    LEFT JOIN users ru ON rm.sender_id = ru.id
                     WHERE m.room_id = ? 
                     ORDER BY m.timestamp ASC LIMIT 50
                 `,
