@@ -53,12 +53,51 @@ async function initDb() {
         
         // Insert default room
         await db.execute(`INSERT OR IGNORE INTO rooms (id, name, type) VALUES (1, 'Général', 'public')`);
+        
+        try { await db.execute(`ALTER TABLE rooms ADD COLUMN creator_id INTEGER`); } catch(e){}
+        try { await db.execute(`ALTER TABLE rooms ADD COLUMN is_locked INTEGER DEFAULT 0`); } catch(e){}
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS room_members (
+            room_id INTEGER,
+            user_id INTEGER,
+            PRIMARY KEY(room_id, user_id),
+            FOREIGN KEY(room_id) REFERENCES rooms(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )`);
+
+        // Nettoyage automatique des messages de plus de 24h
+        setInterval(async () => {
+            try {
+                const res = await db.execute(`DELETE FROM messages WHERE timestamp < datetime('now', '-24 hours')`);
+                if (res.rowsAffected > 0) {
+                    console.log(`[Nettoyage 24h] ${res.rowsAffected} message(s) supprimé(s).`);
+                    io.emit('messages_cleaned');
+                }
+            } catch(e) {}
+        }, 10 * 60 * 1000);
+        
+        setTimeout(async () => {
+            try { await db.execute(`DELETE FROM messages WHERE timestamp < datetime('now', '-24 hours')`); } catch(e){}
+        }, 5000);
+
         console.log('Connecté à la base de données (Turso/SQLite).');
     } catch (err) {
         console.error("Erreur d'initialisation DB:", err);
     }
 }
 initDb();
+
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Accès refusé' });
+    
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Token invalide' });
+        req.user = user;
+        next();
+    });
+}
 
 // Auth Routes
 app.post('/api/register', async (req, res) => {
@@ -121,17 +160,18 @@ app.get('/api/rooms', async (req, res) => {
     }
 });
 
-app.post('/api/rooms', async (req, res) => {
-    const { name } = req.body;
+app.post('/api/rooms', authenticateToken, async (req, res) => {
+    const { name, is_locked } = req.body;
     if (!name) return res.status(400).json({ error: "Nom du canal requis." });
 
+    const lockedVal = is_locked ? 1 : 0;
     try {
         const result = await db.execute({
-            sql: `INSERT INTO rooms (name, type) VALUES (?, 'public')`,
-            args: [name]
+            sql: `INSERT INTO rooms (name, type, creator_id, is_locked) VALUES (?, 'public', ?, ?)`,
+            args: [name, req.user.id, lockedVal]
         });
         const roomId = Number(result.lastInsertRowid);
-        const roomData = { id: roomId, name, type: 'public' };
+        const roomData = { id: roomId, name, type: 'public', creator_id: req.user.id, is_locked: lockedVal };
         io.emit('room_created', roomData);
         res.status(201).json(roomData);
     } catch (error) {
@@ -139,6 +179,60 @@ app.post('/api/rooms', async (req, res) => {
             return res.status(400).json({ error: "Ce canal existe déjà." });
         }
         res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
+app.post('/api/rooms/:id/toggle_lock', authenticateToken, async (req, res) => {
+    const roomId = Number(req.params.id);
+    try {
+        const roomRes = await db.execute({
+            sql: `SELECT * FROM rooms WHERE id = ?`,
+            args: [roomId]
+        });
+        const room = roomRes.rows[0];
+        if (!room) return res.status(404).json({ error: "Canal introuvable" });
+        if (room.creator_id !== req.user.id) return res.status(403).json({ error: "Seul le créateur peut verrouiller ce canal" });
+
+        const newLock = room.is_locked === 1 ? 0 : 1;
+        await db.execute({
+            sql: `UPDATE rooms SET is_locked = ? WHERE id = ?`,
+            args: [newLock, roomId]
+        });
+        io.emit('room_updated', { id: roomId, is_locked: newLock });
+        res.json({ success: true, is_locked: newLock });
+    } catch(e) {
+        res.status(500).json({ error: "Erreur serveur" });
+    }
+});
+
+app.post('/api/rooms/:id/invite', authenticateToken, async (req, res) => {
+    const roomId = Number(req.params.id);
+    const { username } = req.body;
+    try {
+        const roomRes = await db.execute({
+            sql: `SELECT * FROM rooms WHERE id = ?`,
+            args: [roomId]
+        });
+        const room = roomRes.rows[0];
+        if (!room) return res.status(404).json({ error: "Canal introuvable" });
+        if (room.creator_id !== req.user.id) return res.status(403).json({ error: "Seul le créateur peut inviter des membres" });
+
+        const userRes = await db.execute({
+            sql: `SELECT * FROM users WHERE username = ?`,
+            args: [username]
+        });
+        const targetUser = userRes.rows[0];
+        if (!targetUser) return res.status(404).json({ error: "Utilisateur introuvable" });
+
+        await db.execute({
+            sql: `INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)`,
+            args: [roomId, targetUser.id]
+        });
+        
+        io.emit('user_invited', { roomId, roomName: room.name, userId: targetUser.id });
+        res.json({ success: true, message: `${username} a été invité avec succès.` });
+    } catch(e) {
+        res.status(500).json({ error: "Erreur serveur" });
     }
 });
 
@@ -202,7 +296,7 @@ io.on('connection', async (socket) => {
                 username: socket.user.username
             };
             
-            io.to(`room_${roomId}`).emit('new_message', messageData);
+            io.emit('new_message', messageData);
         } catch (e) {
             console.error(e);
         }
@@ -211,6 +305,29 @@ io.on('connection', async (socket) => {
     socket.on('join_room', async (data) => {
         const { roomId } = data;
         
+        try {
+            const roomRes = await db.execute({
+                sql: `SELECT * FROM rooms WHERE id = ?`,
+                args: [roomId]
+            });
+            const room = roomRes.rows[0];
+            if (!room) return;
+
+            if (room.is_locked === 1 && room.creator_id !== socket.user.id) {
+                const memberRes = await db.execute({
+                    sql: `SELECT * FROM room_members WHERE room_id = ? AND user_id = ?`,
+                    args: [roomId, socket.user.id]
+                });
+                if (memberRes.rows.length === 0) {
+                    socket.emit('room_access_denied', { roomId, message: "Ce canal est verrouillé et vous n'y êtes pas invité." });
+                    return;
+                }
+            }
+        } catch(e) {
+            console.error(e);
+            return;
+        }
+
         // Leave other rooms starting with room_
         const rooms = Array.from(socket.rooms);
         rooms.forEach(r => {

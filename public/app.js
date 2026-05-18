@@ -28,8 +28,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const currentRoomName = document.getElementById('current-room-name');
     const createRoomModal = document.getElementById('create-room-modal');
     const newRoomNameInput = document.getElementById('new-room-name');
+    const newRoomLockedCheckbox = document.getElementById('new-room-locked');
     const cancelRoomBtn = document.getElementById('cancel-room-btn');
     const confirmRoomBtn = document.getElementById('confirm-room-btn');
+    
+    const roomSearchInput = document.getElementById('room-search-input');
+    const toggleLockBtn = document.getElementById('toggle-lock-btn');
+    const inviteMemberBtn = document.getElementById('invite-member-btn');
+    const inviteModal = document.getElementById('invite-modal');
+    const inviteUsernameInput = document.getElementById('invite-username');
+    const cancelInviteBtn = document.getElementById('cancel-invite-btn');
+    const confirmInviteBtn = document.getElementById('confirm-invite-btn');
+    const micBtn = document.getElementById('mic-btn');
+    const recordingTimer = document.getElementById('recording-timer');
+    const recordingTimeDisplay = document.getElementById('recording-time');
 
     // State
     let currentTab = 'login';
@@ -37,6 +49,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentUser = null;
     let currentRoomId = 1; // Default General room
     let typingTimeout = null;
+    let unreadCounts = {};
+    let allRooms = [];
+    let currentRoomData = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recordingInterval = null;
+    let recordingSeconds = 0;
 
     // Check Authentication on load
     const token = localStorage.getItem('prodigy_token');
@@ -126,6 +145,10 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUsername.textContent = currentUser.username;
         currentUserAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
 
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
         connectSocket(token);
         fetchUsers();
         fetchRooms();
@@ -178,8 +201,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const textData = await res.text();
                 if (textData) {
                     try {
-                        const rooms = JSON.parse(textData);
-                        renderRoomsList(rooms);
+                        allRooms = JSON.parse(textData);
+                        currentRoomData = allRooms.find(r => Number(r.id) === Number(currentRoomId));
+                        renderRoomsList(allRooms);
+                        updateRoomActions();
+                        
+                        if (currentRoomData) {
+                            let headerIcon = currentRoomData.is_locked === 1 ? '🔒' : '#';
+                            currentRoomName.textContent = `${headerIcon} ${currentRoomData.name}`;
+                        }
                     } catch (e) {
                         console.error('Erreur JSON canaux:', textData);
                     }
@@ -195,7 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
         rooms.forEach(room => {
             const li = document.createElement('li');
             li.dataset.room = room.id;
-            li.textContent = `# ${room.name}`;
+            
+            let icon = '#';
+            if (room.is_locked === 1) {
+                icon = '🔒';
+            }
+            
+            li.innerHTML = `<span style="margin-right:0.5rem; font-size:0.9rem;">${icon}</span> ${room.name}`;
             if (Number(room.id) === Number(currentRoomId)) {
                 li.classList.add('active');
             }
@@ -205,6 +241,15 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             roomList.appendChild(li);
+            updateRoomBadge(room.id);
+        });
+    }
+
+    if (roomSearchInput) {
+        roomSearchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = allRooms.filter(r => r.name.toLowerCase().includes(term));
+            renderRoomsList(filtered);
         });
     }
 
@@ -212,7 +257,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (Number(roomId) === Number(currentRoomId)) return;
         
         currentRoomId = roomId;
-        currentRoomName.textContent = `# ${roomName}`;
+        currentRoomData = allRooms.find(r => Number(r.id) === Number(roomId));
+        
+        let headerIcon = currentRoomData && currentRoomData.is_locked === 1 ? '🔒' : '#';
+        currentRoomName.textContent = `${headerIcon} ${roomName}`;
+        
+        updateRoomActions();
+        
+        // Clear unread count
+        unreadCounts[roomId] = 0;
+        updateRoomBadge(roomId);
         
         // Update active class in sidebar
         const roomItems = roomList.querySelectorAll('li');
@@ -262,10 +316,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         socket.on('new_message', (msg) => {
-            if (msg.room_id === currentRoomId) {
+            if (Number(msg.room_id) === Number(currentRoomId)) {
                 appendMessage(msg);
                 scrollToBottom();
                 typingIndicator.classList.add('hidden');
+                if (document.hidden) {
+                    showNativeNotification(msg);
+                }
+            } else {
+                unreadCounts[msg.room_id] = (unreadCounts[msg.room_id] || 0) + 1;
+                updateRoomBadge(msg.room_id);
+                showToastNotification(msg);
+                showNativeNotification(msg);
             }
         });
 
@@ -280,6 +342,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 fetchUsers(); // Refresh if new user
+            }
+        });
+        
+        socket.on('room_access_denied', (data) => {
+            alert(data.message);
+            // Revert back to general
+            if (currentRoomId !== 1) {
+                switchRoom(1, 'Général');
+            }
+        });
+        
+        socket.on('room_updated', (data) => {
+            fetchRooms();
+        });
+        
+        socket.on('user_invited', (data) => {
+            if (data.userId === currentUser.id) {
+                alert(`Vous avez été invité au canal privé: ${data.roomName}`);
+                fetchRooms();
             }
         });
 
@@ -334,6 +415,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (confirmRoomBtn) {
         confirmRoomBtn.addEventListener('click', async () => {
             const roomName = newRoomNameInput.value.trim();
+            const isLocked = newRoomLockedCheckbox ? newRoomLockedCheckbox.checked : false;
+            
             if (!roomName) return;
             
             try {
@@ -343,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
                     },
-                    body: JSON.stringify({ name: roomName })
+                    body: JSON.stringify({ name: roomName, is_locked: isLocked })
                 });
                 
                 const textData = await res.text();
@@ -360,6 +443,152 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Erreur de communication avec le serveur');
             }
         });
+    }
+
+    // Lock/Unlock Room
+    if (toggleLockBtn) {
+        toggleLockBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch(`/api/rooms/${currentRoomId}/toggle_lock`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                    }
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.error || "Erreur lors du verrouillage");
+                }
+            } catch(e) {
+                alert("Erreur serveur");
+            }
+        });
+    }
+
+    // Invite Member
+    if (inviteMemberBtn) {
+        inviteMemberBtn.addEventListener('click', () => {
+            inviteModal.classList.remove('hidden');
+            inviteUsernameInput.value = '';
+            inviteUsernameInput.focus();
+        });
+    }
+    
+    if (cancelInviteBtn) {
+        cancelInviteBtn.addEventListener('click', () => {
+            inviteModal.classList.add('hidden');
+        });
+    }
+
+    if (confirmInviteBtn) {
+        confirmInviteBtn.addEventListener('click', async () => {
+            const username = inviteUsernameInput.value.trim();
+            if (!username) return;
+
+            try {
+                const res = await fetch(`/api/rooms/${currentRoomId}/invite`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                    },
+                    body: JSON.stringify({ username })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.error || "Erreur lors de l'invitation");
+                } else {
+                    alert(data.message);
+                    inviteModal.classList.add('hidden');
+                }
+            } catch(e) {
+                alert("Erreur serveur");
+            }
+        });
+    }
+
+    // Audio Recording
+    if (micBtn) {
+        micBtn.addEventListener('mousedown', startRecording);
+        micBtn.addEventListener('mouseup', stopRecording);
+        micBtn.addEventListener('mouseleave', stopRecording);
+        // Mobile support
+        micBtn.addEventListener('touchstart', startRecording);
+        micBtn.addEventListener('touchend', stopRecording);
+    }
+
+    async function startRecording(e) {
+        e.preventDefault();
+        if (mediaRecorder && mediaRecorder.state === 'recording') return;
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+            
+            mediaRecorder.onstop = () => {
+                const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                const audioBlob = new Blob(audioChunks, { type: mimeType });
+                stream.getTracks().forEach(track => track.stop());
+                
+                // Don't send empty or broken recordings
+                if (audioChunks.length === 0 || audioBlob.size === 0) {
+                    return;
+                }
+                
+                // Read as base64 and send
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const durationToSend = recordingSeconds || 1;
+                    const content = `[AUDIO]:audio.webm|${mimeType}|${durationToSend}|${ev.target.result}`;
+                    socket.emit('send_message', {
+                        roomId: currentRoomId,
+                        content: content
+                    });
+                };
+                reader.readAsDataURL(audioBlob);
+            };
+            
+            mediaRecorder.start();
+            micBtn.style.color = 'var(--error)';
+            micBtn.style.transform = 'scale(1.1)';
+
+            // Start UI Timer
+            messageInput.classList.add('hidden');
+            if (recordingTimer) recordingTimer.classList.remove('hidden');
+            recordingSeconds = 0;
+            if (recordingTimeDisplay) recordingTimeDisplay.textContent = '00:00';
+            recordingInterval = setInterval(() => {
+                recordingSeconds++;
+                const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+                const secs = String(recordingSeconds % 60).padStart(2, '0');
+                if (recordingTimeDisplay) recordingTimeDisplay.textContent = `${mins}:${secs}`;
+            }, 1000);
+            
+        } catch (err) {
+            console.error("Microphone access denied", err);
+            alert("Veuillez autoriser l'accès au microphone pour envoyer des vocaux.");
+        }
+    }
+
+    function stopRecording(e) {
+        e.preventDefault();
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            micBtn.style.color = '';
+            micBtn.style.transform = '';
+            
+            // Stop UI Timer
+            clearInterval(recordingInterval);
+            messageInput.classList.remove('hidden');
+            if (recordingTimer) recordingTimer.classList.add('hidden');
+        }
     }
 
     fileInput.addEventListener('change', (e) => {
@@ -395,8 +624,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
         let displayContent = escapeHTML(msg.content);
+        let isAudio = false;
         
-        // Check if message is a file
+        // Check if message is a file or audio
         if (msg.content && msg.content.startsWith('[FILE]:')) {
             try {
                 const parts = msg.content.substring(7).split('|');
@@ -417,6 +647,66 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch(e) {
                 displayContent = "Fichier corrompu";
             }
+        } else if (msg.content && msg.content.startsWith('[AUDIO]:')) {
+            isAudio = true;
+            try {
+                const parts = msg.content.substring(8).split('|');
+                let fileData = parts[2];
+                let fixedDuration = 0;
+                
+                // Backwards compatibility check
+                if (fileData && !fileData.startsWith('data:')) {
+                    fixedDuration = parseInt(parts[2]);
+                    fileData = parts[3];
+                }
+
+                const audioId = 'audio-' + Math.random().toString(36).substr(2, 9);
+                const displayTime = fixedDuration > 0 ? `${Math.floor(fixedDuration / 60)}:${String(fixedDuration % 60).padStart(2, '0')}` : '0:00';
+                
+                displayContent = `
+                    <div class="custom-audio">
+                        <button onclick="window.toggleAudio('${audioId}', this)" class="audio-btn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        </button>
+                        <div class="audio-body">
+                            <div class="audio-track">
+                                <div id="progress-${audioId}" class="audio-fill"></div>
+                            </div>
+                            <div class="audio-info">
+                                <span class="audio-label">Vocal</span>
+                                <span id="time-${audioId}" class="audio-time">${displayTime}</span>
+                            </div>
+                        </div>
+                        <audio id="${audioId}" data-fixed-duration="${fixedDuration}" ontimeupdate="window.updateAudioProgress('${audioId}')" onended="window.resetAudio('${audioId}')" onplay="window.updateAudioProgress('${audioId}')" onpause="window.updateAudioProgress('${audioId}')" preload="auto"></audio>
+                    </div>
+                `;
+
+                // Load native blob asynchronously
+                if (fileData && fileData.startsWith('data:')) {
+                    fetch(fileData)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const blobUrl = URL.createObjectURL(blob);
+                            // We need to wait for the element to be inserted into the DOM
+                            setTimeout(() => {
+                                const audioEl = document.getElementById(audioId);
+                                if (audioEl) audioEl.src = blobUrl;
+                            }, 50);
+                        })
+                        .catch(err => console.error('Blob fetch failed:', err));
+                }
+            } catch(e) {
+                displayContent = "Audio corrompu";
+            }
+        } else {
+            // Highlight mentions
+            const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+            displayContent = displayContent.replace(mentionRegex, (match, p1) => {
+                if (p1 === currentUser.username) {
+                    return `<span style="background: var(--error); color: white; padding: 0 4px; border-radius: 4px; font-weight: bold;">${match}</span>`;
+                }
+                return `<span style="color: var(--success); font-weight: bold;">${match}</span>`;
+            });
         }
         
         const div = document.createElement('div');
@@ -429,7 +719,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="message-sender">${msg.username}</span>
                     <span class="message-time">${time}</span>
                 </div>
-                <div class="message-bubble">${displayContent}</div>
+                <div class="message-bubble ${isAudio ? 'audio-bubble' : ''}">${displayContent}</div>
             </div>
         `;
         
@@ -446,6 +736,98 @@ document.addEventListener('DOMContentLoaded', () => {
         return div.innerHTML;
     }
 
+    // Notifications Helpers
+    function updateRoomActions() {
+        if (!currentRoomData) return;
+        
+        if (currentRoomData.creator_id === currentUser.id) {
+            toggleLockBtn.classList.remove('hidden');
+            if (currentRoomData.is_locked === 1) {
+                toggleLockBtn.style.color = 'var(--error)';
+                inviteMemberBtn.classList.remove('hidden');
+            } else {
+                toggleLockBtn.style.color = '';
+                inviteMemberBtn.classList.add('hidden');
+            }
+        } else {
+            toggleLockBtn.classList.add('hidden');
+            inviteMemberBtn.classList.add('hidden');
+        }
+    }
+
+    function updateRoomBadge(roomId) {
+        const roomLi = roomList.querySelector(`li[data-room="${roomId}"]`);
+        if (!roomLi) return;
+        
+        let badge = roomLi.querySelector('.unread-badge');
+        const count = unreadCounts[roomId] || 0;
+        
+        if (count > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'unread-badge';
+                roomLi.appendChild(badge);
+            }
+            badge.textContent = count;
+        } else if (badge) {
+            badge.remove();
+        }
+    }
+
+    function showToastNotification(msg) {
+        const toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) return;
+        
+        const roomLi = roomList.querySelector(`li[data-room="${msg.room_id}"]`);
+        const roomName = roomLi ? roomLi.textContent.replace(/#\s*/, '').replace(/\s*\d+$/, '') : `Canal ${msg.room_id}`;
+        
+        let cleanText = msg.content;
+        if (cleanText.startsWith('[FILE]:')) {
+            cleanText = "📎 Fichier joint";
+        }
+        
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerHTML = `
+            <div class="toast-avatar">${msg.username.charAt(0).toUpperCase()}</div>
+            <div class="toast-content">
+                <div class="toast-header">
+                    <span class="toast-sender">${escapeHTML(msg.username)}</span>
+                    <span class="toast-room"># ${escapeHTML(roomName)}</span>
+                </div>
+                <div class="toast-text">${escapeHTML(cleanText)}</div>
+            </div>
+        `;
+        
+        toast.addEventListener('click', () => {
+            switchRoom(msg.room_id, roomName);
+            toast.remove();
+        });
+        
+        toastContainer.appendChild(toast);
+        
+        setTimeout(() => {
+            if (toast.parentElement) toast.remove();
+        }, 5000);
+    }
+
+    function showNativeNotification(msg) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+            const roomLi = roomList.querySelector(`li[data-room="${msg.room_id}"]`);
+            const roomName = roomLi ? roomLi.textContent.replace(/#\s*/, '').replace(/\s*\d+$/, '') : `Canal ${msg.room_id}`;
+            
+            let cleanText = msg.content;
+            if (cleanText.startsWith('[FILE]:')) {
+                cleanText = "📎 Fichier joint";
+            }
+            
+            new Notification(`Nouveau message dans #${roomName}`, {
+                body: `${msg.username}: ${cleanText}`,
+                icon: '/favicon.ico'
+            });
+        }
+    }
+
     // Toggle menu event listeners
     if (menuToggleBtn && sidebar) {
         menuToggleBtn.addEventListener('click', (e) => {
@@ -459,4 +841,85 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // ========== CUSTOM AUDIO PLAYER (NATIVE EVENT-DRIVEN) ==========
+    // Uses the HTML5 native 'timeupdate' event, 'ended', 'play', and 'pause'
+    
+    window.toggleAudio = function(audioId, btn) {
+        const audio = document.getElementById(audioId);
+        if (!audio) return;
+
+        if (audio.paused) {
+            // Pause all other playing audios
+            document.querySelectorAll('audio').forEach(a => {
+                if (a.id !== audioId && !a.paused) {
+                    a.pause();
+                }
+            });
+            audio.play().catch(err => console.error('Audio play failed:', err));
+        } else {
+            audio.pause();
+        }
+    };
+
+    window.updateAudioProgress = function(audioId) {
+        const audio = document.getElementById(audioId);
+        if (!audio) return;
+
+        const progress = document.getElementById('progress-' + audioId);
+        const timeDisplay = document.getElementById('time-' + audioId);
+        const btn = audio.parentElement.querySelector('.audio-btn');
+
+        // Update play/pause button state visually
+        if (btn) {
+            if (audio.paused) {
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+            } else {
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
+            }
+        }
+
+        // Use custom duration stored during recording or fallback to native duration, or fallback to 10s if Infinity/NaN
+        const fixedDuration = parseFloat(audio.getAttribute('data-fixed-duration')) || 0;
+        const duration = fixedDuration > 0 ? fixedDuration : (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 10);
+
+        if (duration > 0) {
+            // Calculate progress using current time and duration
+            const progressPercent = (audio.currentTime / duration) * 100;
+            if (progress) {
+                progress.style.width = `${Math.min(progressPercent, 100)}%`;
+            }
+        }
+
+        // Update the elapsed/fixed time display
+        if (timeDisplay) {
+            const current = Math.floor(audio.currentTime);
+            const mins = Math.floor(current / 60);
+            const secs = String(current % 60).padStart(2, '0');
+            timeDisplay.textContent = `${mins}:${secs}`;
+        }
+    };
+
+    window.resetAudio = function(audioId) {
+        const audio = document.getElementById(audioId);
+        if (!audio) return;
+
+        const progress = document.getElementById('progress-' + audioId);
+        const timeDisplay = document.getElementById('time-' + audioId);
+        const btn = audio.parentElement.querySelector('.audio-btn');
+
+        if (progress) {
+            progress.style.width = '0%';
+        }
+
+        if (btn) {
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+        }
+
+        if (timeDisplay) {
+            const fixedDuration = parseFloat(audio.getAttribute('data-fixed-duration')) || 0;
+            const displayTime = fixedDuration > 0 ? `${Math.floor(fixedDuration / 60)}:${String(Math.floor(fixedDuration) % 60).padStart(2, '0')}` : '0:00';
+            timeDisplay.textContent = displayTime;
+        }
+    };
 });
