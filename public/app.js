@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutBtn = document.getElementById('logout-btn');
     const menuToggleBtn = document.getElementById('menu-toggle-btn');
     const sidebar = document.querySelector('.sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
     
     const messagesContainer = document.getElementById('messages-container');
     const messageForm = document.getElementById('message-form');
@@ -308,6 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Close sidebar on mobile
         if (sidebar && sidebar.classList.contains('open')) {
             sidebar.classList.remove('open');
+            if (sidebarOverlay) sidebarOverlay.classList.remove('active');
         }
     }
 
@@ -1187,13 +1189,24 @@ document.addEventListener('DOMContentLoaded', () => {
         menuToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             sidebar.classList.toggle('open');
+            if (sidebarOverlay) {
+                sidebarOverlay.classList.toggle('active', sidebar.classList.contains('open'));
+            }
         });
         
         document.addEventListener('click', (e) => {
             if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggleBtn) {
                 sidebar.classList.remove('open');
+                if (sidebarOverlay) sidebarOverlay.classList.remove('active');
             }
         });
+
+        if (sidebarOverlay) {
+            sidebarOverlay.addEventListener('click', () => {
+                sidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+        }
     }
 
     // ========== CUSTOM AUDIO PLAYER (NATIVE EVENT-DRIVEN) ==========

@@ -404,6 +404,8 @@ body {
     flex-direction: column;
     gap: 0.02rem;
     align-items: flex-start; /* Réduit la bulle à la taille exacte du texte au lieu de s'étirer */
+    max-width: calc(100% - 35px); /* desktop bounds */
+    min-width: 0;
 }
 
 .message.self .message-content {
@@ -804,6 +806,11 @@ body {
         gap: 0.5rem;
     }
 
+    .message-content {
+        max-width: calc(100% - 40px);
+        min-width: 0;
+    }
+
     .message-avatar {
         width: 32px;
         height: 32px;
@@ -856,14 +863,42 @@ body {
         padding: 0.6rem 0.75rem;
     }
 
+    .chat-input-area .btn-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        padding: 4px;
+    }
+
     #message-form {
         padding: 0.15rem;
         border-radius: 12px;
     }
 
     #message-input {
-        padding: 0.4rem 0.6rem;
-        font-size: 0.95rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.9rem;
+    }
+
+    .sidebar-overlay {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .sidebar-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
     }
 }
 
@@ -1381,6 +1416,11 @@ body {
 
 .message-highlight-flash {
     animation: highlightFlash 1.2s ease-out;
+}
+
+/* Sidebar mobile backdrop overlay base */
+.sidebar-overlay {
+    display: none;
 }
 
 
