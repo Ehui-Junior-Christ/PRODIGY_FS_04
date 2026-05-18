@@ -26,6 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const createRoomBtn = document.getElementById('create-room-btn');
     const roomList = document.getElementById('room-list');
     const currentRoomName = document.getElementById('current-room-name');
+    const createRoomModal = document.getElementById('create-room-modal');
+    const newRoomNameInput = document.getElementById('new-room-name');
+    const cancelRoomBtn = document.getElementById('cancel-room-btn');
+    const confirmRoomBtn = document.getElementById('confirm-room-btn');
 
     // State
     let currentTab = 'login';
@@ -313,12 +317,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (createRoomBtn) {
-        createRoomBtn.addEventListener('click', async (e) => {
+        createRoomBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const roomName = prompt('Entrez le nom du nouveau canal :');
+            createRoomModal.classList.remove('hidden');
+            newRoomNameInput.value = '';
+            newRoomNameInput.focus();
+        });
+    }
+
+    if (cancelRoomBtn) {
+        cancelRoomBtn.addEventListener('click', () => {
+            createRoomModal.classList.add('hidden');
+        });
+    }
+
+    if (confirmRoomBtn) {
+        confirmRoomBtn.addEventListener('click', async () => {
+            const roomName = newRoomNameInput.value.trim();
             if (!roomName) return;
-            const trimmedName = roomName.trim();
-            if (!trimmedName) return;
             
             try {
                 const res = await fetch('/api/rooms', {
@@ -327,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
                     },
-                    body: JSON.stringify({ name: trimmedName })
+                    body: JSON.stringify({ name: roomName })
                 });
                 
                 const textData = await res.text();
@@ -336,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!res.ok) {
                     alert(data.error || 'Erreur lors de la création du canal');
                 } else {
-                    // Switch to the newly created room
+                    createRoomModal.classList.add('hidden');
                     switchRoom(data.id, data.name);
                 }
             } catch (error) {
