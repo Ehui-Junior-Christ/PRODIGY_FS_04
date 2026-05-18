@@ -859,8 +859,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="message-bubble ${isAudio ? 'audio-bubble' : ''} ${isSticker ? 'sticker-bubble' : ''}">${displayContent}</div>
             </div>
         `;
-            </div>
-        `;
         
         messagesContainer.appendChild(div);
     }
