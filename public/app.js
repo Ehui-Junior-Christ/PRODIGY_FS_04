@@ -313,18 +313,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Socket Interactions
     function connectSocket(token) {
+        const statusDot = document.getElementById('connection-status-dot');
+        const statusText = document.getElementById('connection-status-text');
+
+        function updateUIStatus(state) {
+            if (!statusDot || !statusText) return;
+            statusDot.classList.remove('online', 'reconnecting');
+            
+            if (state === 'online') {
+                statusDot.classList.add('online');
+                statusText.textContent = 'Connecté';
+            } else if (state === 'reconnecting') {
+                statusDot.classList.add('reconnecting');
+                statusText.textContent = 'Reconnexion...';
+            } else {
+                statusText.textContent = 'Déconnecté';
+            }
+        }
+
         socket = io({
-            auth: { token }
+            auth: { token },
+            transports: ['polling', 'websocket'], // Force HTTP Polling first for 100% mobile connectivity, then upgrade to WebSocket
+            upgrade: true,
+            rememberUpgrade: true,
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000
         });
 
         socket.on('connect', () => {
             console.log('Connecté au serveur de messagerie');
+            updateUIStatus('online');
             // Synchronisation automatique : Rejoindre immédiatement le canal en cours de visualisation lors de la connexion ou d'une reconnexion
             socket.emit('join_room', { roomId: currentRoomId });
         });
 
+        socket.on('disconnect', (reason) => {
+            console.log('Déconnecté du serveur:', reason);
+            updateUIStatus('offline');
+        });
+
+        socket.on('reconnect_attempt', () => {
+            console.log('Tentative de reconnexion...');
+            updateUIStatus('reconnecting');
+        });
+
         socket.on('connect_error', (err) => {
             console.error('Erreur de connexion socket:', err.message);
+            updateUIStatus('offline');
             if (err.message === 'Authentication error') {
                 logoutBtn.click();
             }

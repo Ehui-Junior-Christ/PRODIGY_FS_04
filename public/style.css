@@ -356,7 +356,16 @@ body {
     width: 6px;
     height: 6px;
     border-radius: 50%;
+    background: #ef4444;
+    transition: background-color 0.3s ease;
+}
+
+.dot.online {
     background: var(--success);
+}
+
+.dot.reconnecting {
+    background: #f59e0b;
 }
 
 .messages-container {
