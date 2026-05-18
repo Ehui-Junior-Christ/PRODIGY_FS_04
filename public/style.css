@@ -184,6 +184,7 @@ body {
 
 .sidebar {
     width: 320px;
+    flex-shrink: 0;
     background-color: var(--bg-surface);
     border-right: 1px solid var(--border);
     display: flex;
@@ -323,6 +324,7 @@ body {
     flex-direction: column;
     background: var(--bg-base);
     position: relative;
+    min-width: 0; /* Prevents flex items from overflowing */
 }
 
 .chat-header {
@@ -432,6 +434,9 @@ body {
     border-top-left-radius: 4px;
     border: 1px solid var(--border);
     line-height: 1.6;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
 }
 
 .message.self .message-bubble {
@@ -465,6 +470,7 @@ body {
 
 #message-input {
     flex: 1;
+    min-width: 0; /* Elite responsive flexbox practice */
     background: transparent;
     border: none;
     color: var(--text-primary);
@@ -555,8 +561,10 @@ body {
     .sidebar {
         position: fixed;
         top: 0;
-        left: -320px;
+        left: -100%;
         bottom: 0;
+        width: 85%;
+        max-width: 300px;
         z-index: 1000;
         transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         box-shadow: 20px 0 30px rgba(0, 0, 0, 0.5);
@@ -568,8 +576,9 @@ body {
 
     .auth-card {
         padding: 2rem 1.5rem;
-        margin: 1rem;
-        max-width: 90%;
+        margin: 1.5rem;
+        width: 100%;
+        max-width: 400px;
     }
 
     .brand-title {
@@ -582,15 +591,23 @@ body {
     }
 
     .message {
-        max-width: 92%;
+        max-width: 95%;
     }
 
     .chat-header {
         padding: 1rem;
     }
 
+    .chat-header-info h2 {
+        font-size: 1.1rem;
+        max-width: 150px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .chat-input-area {
-        padding: 1rem;
+        padding: 0.75rem 1rem;
     }
 
     #message-form {
