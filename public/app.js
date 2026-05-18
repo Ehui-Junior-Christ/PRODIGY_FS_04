@@ -1658,4 +1658,41 @@ document.addEventListener('DOMContentLoaded', () => {
             stickerPopover.style.display = 'none';
         }
     }
+
+    // ========== PREMIUM THEME SYSTEM ==========
+    const themeButtons = document.querySelectorAll('.theme-btn');
+    
+    function applyTheme(themeName) {
+        // Remove existing theme classes from body
+        document.body.classList.remove('theme-light-blue', 'theme-green', 'theme-orange');
+        
+        // Add the new theme class if it's not 'dark'
+        if (themeName && themeName !== 'dark') {
+            document.body.classList.add(`theme-${themeName}`);
+        }
+        
+        // Save to localStorage
+        localStorage.setItem('prodigy_theme', themeName);
+        
+        // Update active class on buttons
+        themeButtons.forEach(btn => {
+            if (btn.dataset.theme === themeName) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
+    
+    // Initialize theme from localStorage or default to dark
+    const savedTheme = localStorage.getItem('prodigy_theme') || 'dark';
+    applyTheme(savedTheme);
+    
+    // Add click listeners to buttons
+    themeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const selectedTheme = btn.dataset.theme;
+            applyTheme(selectedTheme);
+        });
+    });
 });

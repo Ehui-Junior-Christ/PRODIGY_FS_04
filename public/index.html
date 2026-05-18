@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet" media="all">
-    <link rel="stylesheet" href="style.css?v=7.0">
+    <link rel="stylesheet" href="style.css?v=9.0">
     <link rel="icon" href="data:,">
 </head>
 <body>
@@ -70,6 +70,18 @@
                     <ul class="user-list" id="users-list">
                         <!-- Users dynamically inserted here -->
                     </ul>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="theme-switcher">
+                    <span class="theme-switcher-title">Thème</span>
+                    <div class="theme-buttons">
+                        <button class="theme-btn active" data-theme="dark" title="Sombre" style="--theme-color: #0f0f11; --theme-accent: #ffffff;"></button>
+                        <button class="theme-btn" data-theme="light-blue" title="Bleu Clair" style="--theme-color: #f0f4f8; --theme-accent: #1982fc;"></button>
+                        <button class="theme-btn" data-theme="green" title="Émeraude" style="--theme-color: #0a0f0d; --theme-accent: #10b981;"></button>
+                        <button class="theme-btn" data-theme="orange" title="Orange" style="--theme-color: #110d0a; --theme-accent: #f97316;"></button>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -177,6 +189,6 @@
 
     <div id="toast-container" class="toast-container"></div>
     <script src="/socket.io/socket.io.js"></script>
-    <script src="app.js?v=8.0"></script>
+    <script src="app.js?v=9.0"></script>
 </body>
 </html>
