@@ -68,39 +68,28 @@ async function initDb() {
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
 
-        // Nettoyage automatique des messages de plus de 24h et des fichiers associés sur disque
+        // Nettoyage périodique automatique des fichiers physiques obsolètes sur disque (plus de 30 jours) pour préserver le stockage
         setInterval(async () => {
             try {
-                const res = await db.execute(`DELETE FROM messages WHERE timestamp < datetime('now', '-24 hours')`);
-                if (res.rowsAffected > 0) {
-                    console.log(`[Nettoyage 24h] ${res.rowsAffected} message(s) supprimé(s).`);
-                    io.emit('messages_cleaned');
-                }
-                
-                // Supprimer les fichiers physiques correspondants
                 const fs = require('fs');
                 const uploadsDir = path.join(__dirname, 'public', 'uploads');
                 if (fs.existsSync(uploadsDir)) {
                     const files = fs.readdirSync(uploadsDir);
                     const now = Date.now();
-                    const oneDay = 24 * 60 * 60 * 1000;
+                    const thirtyDays = 30 * 24 * 60 * 60 * 1000; // Les fichiers d'upload sont conservés pendant 30 jours
                     files.forEach(file => {
                         const filePath = path.join(uploadsDir, file);
                         const stat = fs.statSync(filePath);
-                        if (now - stat.mtimeMs > oneDay) {
+                        if (now - stat.mtimeMs > thirtyDays) {
                             fs.unlinkSync(filePath);
-                            console.log(`[Nettoyage Fichiers] Fichier supprimé car obsolète (>24h) : ${file}`);
+                            console.log(`[Nettoyage Fichiers] Fichier expiré supprimé (>30 jours) : ${file}`);
                         }
                     });
                 }
             } catch(e) {
-                console.error("Erreur lors du nettoyage périodique :", e);
+                console.error("Erreur lors du nettoyage des fichiers :", e);
             }
-        }, 10 * 60 * 1000);
-        
-        setTimeout(async () => {
-            try { await db.execute(`DELETE FROM messages WHERE timestamp < datetime('now', '-24 hours')`); } catch(e){}
-        }, 5000);
+        }, 30 * 60 * 1000); // Exécuté toutes les 30 minutes
 
         // S'assurer du répertoire d'uploads
         const fs = require('fs');
@@ -290,20 +279,6 @@ io.on('connection', async (socket) => {
         });
         io.emit('user_status_change', { userId, status: 'online' });
 
-        socket.join('room_1');
-
-        const result = await db.execute({
-            sql: `
-                SELECT m.*, u.username 
-                FROM messages m 
-                JOIN users u ON m.sender_id = u.id 
-                WHERE m.room_id = 1 
-                ORDER BY m.timestamp ASC LIMIT 50
-            `,
-            args: []
-        });
-        
-        socket.emit('chat_history', { roomId: 1, messages: result.rows });
     } catch (e) {
         console.error(e);
     }

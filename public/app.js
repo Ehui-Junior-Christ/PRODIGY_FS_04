@@ -312,6 +312,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.on('connect', () => {
             console.log('Connecté au serveur de messagerie');
+            // Synchronisation automatique : Rejoindre immédiatement le canal en cours de visualisation lors de la connexion ou d'une reconnexion
+            socket.emit('join_room', { roomId: currentRoomId });
         });
 
         socket.on('connect_error', (err) => {
@@ -813,6 +815,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const audioId = 'audio-' + Math.random().toString(36).substr(2, 9);
                 const displayTime = fixedDuration > 0 ? `${Math.floor(fixedDuration / 60)}:${String(fixedDuration % 60).padStart(2, '0')}` : '0:00';
                 
+                const isBase64 = fileData && fileData.startsWith('data:');
+                
                 displayContent = `
                     <div class="custom-audio">
                         <button onclick="window.toggleAudio('${audioId}', this)" class="audio-btn">
@@ -827,7 +831,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <span id="time-${audioId}" class="audio-time">${displayTime}</span>
                             </div>
                         </div>
-                        <audio id="${audioId}" data-fixed-duration="${fixedDuration}" ontimeupdate="window.updateAudioProgress('${audioId}')" onended="window.resetAudio('${audioId}')" onplay="window.updateAudioProgress('${audioId}')" onpause="window.updateAudioProgress('${audioId}')" preload="auto"></audio>
+                        <audio id="${audioId}" src="${!isBase64 ? fileData : ''}" data-fixed-duration="${fixedDuration}" ontimeupdate="window.updateAudioProgress('${audioId}')" onended="window.resetAudio('${audioId}')" onplay="window.updateAudioProgress('${audioId}')" onpause="window.updateAudioProgress('${audioId}')" preload="auto"></audio>
                     </div>
                 `;
 
