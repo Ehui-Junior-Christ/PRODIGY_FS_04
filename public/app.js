@@ -933,15 +933,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="swipe-indicator-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
             </div>
+            <div class="message-avatar">${msg.username.charAt(0).toUpperCase()}</div>
             <div class="message-content">
-                <div class="message-bubble ${isAudio ? 'audio-bubble' : ''} ${isSticker ? 'sticker-bubble' : ''}">
-                    ${!isSelf && !isSticker && !isAudio ? `<span class="message-sender-inside">${escapeHTML(msg.username)}</span>` : ''}
-                    ${replyBubbleHtml}
-                    <div class="message-text-container">
-                        <span class="message-text-content">${displayContent}</span>
-                        ${!isSticker && !isAudio ? `<span class="message-time-inside">${time}</span>` : ''}
-                    </div>
+                <div class="message-meta">
+                    <span class="message-sender">${msg.username}</span>
+                    <span class="message-time">${time}</span>
                 </div>
+                <div class="message-bubble ${isAudio ? 'audio-bubble' : ''} ${isSticker ? 'sticker-bubble' : ''}">${replyBubbleHtml}${displayContent}</div>
             </div>
             <button class="reply-hover-btn" title="Répondre">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
