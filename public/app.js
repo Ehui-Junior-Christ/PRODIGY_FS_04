@@ -122,6 +122,38 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (currentTab === 'register') {
+    // Auto login after register
+    currentTab = 'login';
+    authForm.dispatchEvent(new Event('submit'));
+}
+                    // Add ticket via API
+                    const res = await fetch('/api/tickets', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                        },
+                        body: JSON.stringify({ category, title, description })
+                    });
+                    
+                    const data = await res.json();
+                    if (res.ok) {
+                        showToastNotification({
+                            username: 'Support System',
+                            content: 'Votre plainte a été enregistrée avec succès.',
+                            room_name: 'Support'
+                        });
+                        // Reset form fields
+                        supportTitle.value = '';
+                        supportDescription.value = '';
+                        // Close modal and switch to history tab
+                        supportModal.classList.add('hidden');
+                        switchSupportTab('history');
+                        // Refresh ticket history
+                        fetchMyTickets();
+                    } else {
+                        alert(data.error || "Erreur de soumission");
+                    }
                 // Auto login after register
                 currentTab = 'login';
                 authForm.dispatchEvent(new Event('submit'));
