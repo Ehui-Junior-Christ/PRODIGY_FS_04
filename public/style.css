@@ -451,6 +451,65 @@ body {
     border-top-right-radius: 4px;
 }
 
+/* Styles pour la bulle de réponse imbriquée dans le message */
+.message-reply-bubble {
+    display: block;
+    background: rgba(255, 255, 255, 0.06);
+    border-left: 3px solid var(--accent);
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    margin-bottom: 0.35rem;
+    cursor: pointer;
+    font-size: 0.78rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+/* Si le message est envoyé par soi-même (fond blanc, texte sombre) */
+.message.self .message-reply-bubble {
+    background: rgba(0, 0, 0, 0.08);
+    border-left-color: var(--bg-base);
+}
+
+.message-reply-username {
+    font-weight: 700;
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 1px;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.message.self .message-reply-username {
+    color: var(--bg-base);
+}
+
+.message-reply-text {
+    color: var(--text-secondary);
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.message.self .message-reply-text {
+    color: rgba(0, 0, 0, 0.7);
+}
+
+.message-reply-bubble:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.message.self .message-reply-bubble:hover {
+    background: rgba(0, 0, 0, 0.14);
+}
+
 .message-bubble.audio-bubble {
     background: transparent !important;
     border: none !important;
