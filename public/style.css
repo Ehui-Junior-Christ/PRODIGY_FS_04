@@ -361,18 +361,19 @@ body {
 
 .messages-container {
     flex: 1;
-    padding: 1.5rem;
+    padding: 2rem;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 0.6rem; /* Espace compact entre messages comme sur WhatsApp */
+    gap: 1.5rem;
     scroll-behavior: smooth;
 }
 
 /* Messages */
 .message {
     display: flex;
-    max-width: 65%; /* Limite le message pour un rendu WhatsApp parfait */
+    gap: 0.2rem;
+    max-width: 45%;
     animation: slideIn 0.3s ease forwards;
 }
 
@@ -383,78 +384,77 @@ body {
 
 .message.self {
     align-self: flex-end;
+    flex-direction: row-reverse;
 }
 
 .message-avatar {
-    display: none !important; /* Cache les avatars sur chaque ligne pour gagner de l'espace */
-}
+    width: 25px;
+    height: 25px;
+    background: var(--bg-surface);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    flex-shrink: 0;
+    border: 1px solid var(--border);}
 
 .message-content {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    width: 100%;
+    gap: 0.02rem;
+    align-items: flex-start; /* Réduit la bulle à la taille exacte du texte au lieu de s'étirer */
+}
+
+.message.self .message-content {
+    align-items: flex-end;
+}
+
+.message-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.message.self .message-meta {
+    flex-direction: row-reverse;
+}
+
+.message-sender {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.message-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
 }
 
 .message-bubble {
-    background: #202c33; /* Vert/Gris foncé officiel de WhatsApp pour messages reçus */
-    padding: 6px 10px 8px 12px; /* Marges compactes officielles */
-    border-radius: 8px;
-    border-top-left-radius: 0; /* Angle asymétrique signature */
-    border: none !important; /* Pas de bordures épaisses */
-    line-height: 1.45;
+    padding: 0.4rem 0.75rem;
+    border-radius: 12px;
+    border-top-left-radius: 4px;
+    border: 1px solid var(--border);
+    line-height: 1.35;
     word-break: break-word;
     overflow-wrap: break-word;
     white-space: pre-wrap;
-    box-shadow: 0 1px 1px rgba(0,0,0,0.15); /* Ombre discrète */
+    display: inline-block;
+    width: fit-content;
+    max-width: 100%;
+    text-align: left;
 }
 
 .message.self .message-bubble {
-    background: #005c4b; /* Vert émeraude officiel de WhatsApp pour vos messages */
-    color: #e9edef;
-    border-radius: 8px;
-    border-top-right-radius: 0; /* Angle asymétrique signature côté droit */
-    border-top-left-radius: 8px;
-}
-
-/* Éléments internes de la bulle style WhatsApp */
-.message-sender-inside {
-    font-weight: 700;
-    color: #53bdeb; /* Bleu clair WhatsApp pour faire ressortir l'expéditeur */
-    display: block;
-    font-size: 0.78rem;
-    margin-bottom: 3px;
-    cursor: pointer;
-}
-
-.message-text-container {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 8px;
-    flex-wrap: wrap;
-    width: 100%;
-}
-
-.message-text-content {
-    flex: 1;
-    min-width: 0;
-    font-size: 0.92rem;
-    color: #e9edef;
-}
-
-.message-time-inside {
-    font-size: 0.65rem;
-    color: #8696a0;
-    white-space: nowrap;
-    margin-bottom: -3px;
-    margin-left: auto;
-    user-select: none;
-}
-
-.message.self .message-time-inside {
-    color: rgba(233, 237, 239, 0.6); /* Couleur estompée sur fond vert */
+    background: var(--accent);
+    color: var(--bg-base);
+    border-color: var(--accent);
+    border-radius: 12px;
+    border-top-right-radius: 4px;
+    display: inline-block;
+    width: fit-content;
+    max-width: 100%;
+    text-align: left;
 }
 
 /* Styles pour la bulle de réponse imbriquée dans le message */
@@ -800,27 +800,44 @@ body {
     }
 
     .message {
-        max-width: 85%;
+        max-width: 90%;
+        gap: 0.5rem;
+    }
+
+    .message-avatar {
+        width: 32px;
+        height: 32px;
+        font-size: 0.85rem;
+        border-radius: 8px;
     }
 
     .message-bubble {
-        padding: 5px 8px 6px 10px;
-        border-radius: 8px;
-        border-top-left-radius: 0;
+        padding: 0.4rem 0.75rem;
+        border-radius: 12px;
         font-size: 0.9rem;
-        line-height: 1.4;
+        line-height: 1.35;
+        display: inline-block;
+        width: fit-content;
+        max-width: 100%;
+        text-align: left;
     }
 
     .message.self .message-bubble {
-        border-radius: 8px;
-        border-top-right-radius: 0;
-        border-top-left-radius: 8px;
+        border-radius: 12px;
+        border-top-right-radius: 4px;
+        display: inline-block;
+        width: fit-content;
+        max-width: 100%;
+        text-align: left;
     }
 
     .message:not(.self) .message-bubble {
-        border-radius: 8px;
-        border-top-left-radius: 0;
-        border-top-right-radius: 8px;
+        border-radius: 12px;
+        border-top-left-radius: 4px;
+        display: inline-block;
+        width: fit-content;
+        max-width: 100%;
+        text-align: left;
     }
 
     .chat-header {
