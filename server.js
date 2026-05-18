@@ -112,6 +112,36 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
+app.get('/api/rooms', async (req, res) => {
+    try {
+        const result = await db.execute(`SELECT * FROM rooms`);
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
+app.post('/api/rooms', async (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: "Nom du canal requis." });
+
+    try {
+        const result = await db.execute({
+            sql: `INSERT INTO rooms (name, type) VALUES (?, 'public')`,
+            args: [name]
+        });
+        const roomId = Number(result.lastInsertRowid);
+        const roomData = { id: roomId, name, type: 'public' };
+        io.emit('room_created', roomData);
+        res.status(201).json(roomData);
+    } catch (error) {
+        if (error.message && error.message.includes('UNIQUE constraint failed')) {
+            return res.status(400).json({ error: "Ce canal existe déjà." });
+        }
+        res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
 // Authentication middleware for sockets
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
@@ -173,6 +203,36 @@ io.on('connection', async (socket) => {
             };
             
             io.to(`room_${roomId}`).emit('new_message', messageData);
+        } catch (e) {
+            console.error(e);
+        }
+    });
+
+    socket.on('join_room', async (data) => {
+        const { roomId } = data;
+        
+        // Leave other rooms starting with room_
+        const rooms = Array.from(socket.rooms);
+        rooms.forEach(r => {
+            if (r.startsWith('room_')) {
+                socket.leave(r);
+            }
+        });
+        
+        socket.join(`room_${roomId}`);
+        
+        try {
+            const result = await db.execute({
+                sql: `
+                    SELECT m.*, u.username 
+                    FROM messages m 
+                    JOIN users u ON m.sender_id = u.id 
+                    WHERE m.room_id = ? 
+                    ORDER BY m.timestamp ASC LIMIT 50
+                `,
+                args: [roomId]
+            });
+            socket.emit('chat_history', { roomId, messages: result.rows });
         } catch (e) {
             console.error(e);
         }

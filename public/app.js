@@ -23,6 +23,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const onlineCount = document.getElementById('online-count');
     const currentUserAvatar = document.getElementById('current-user-avatar');
     const currentUsername = document.getElementById('current-username');
+    const createRoomBtn = document.getElementById('create-room-btn');
+    const roomList = document.getElementById('room-list');
+    const currentRoomName = document.getElementById('current-room-name');
 
     // State
     let currentTab = 'login';
@@ -121,6 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         connectSocket(token);
         fetchUsers();
+        fetchRooms();
     }
 
     async function fetchUsers() {
@@ -161,6 +165,71 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         onlineCount.textContent = online + 1; // +1 for current user
+    }
+
+    async function fetchRooms() {
+        try {
+            const res = await fetch('/api/rooms');
+            if (res.ok) {
+                const textData = await res.text();
+                if (textData) {
+                    try {
+                        const rooms = JSON.parse(textData);
+                        renderRoomsList(rooms);
+                    } catch (e) {
+                        console.error('Erreur JSON canaux:', textData);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Erreur lors de la récupération des canaux', error);
+        }
+    }
+
+    function renderRoomsList(rooms) {
+        roomList.innerHTML = '';
+        rooms.forEach(room => {
+            const li = document.createElement('li');
+            li.dataset.room = room.id;
+            li.textContent = `# ${room.name}`;
+            if (Number(room.id) === Number(currentRoomId)) {
+                li.classList.add('active');
+            }
+            
+            li.addEventListener('click', () => {
+                switchRoom(room.id, room.name);
+            });
+            
+            roomList.appendChild(li);
+        });
+    }
+
+    function switchRoom(roomId, roomName) {
+        if (Number(roomId) === Number(currentRoomId)) return;
+        
+        currentRoomId = roomId;
+        currentRoomName.textContent = `# ${roomName}`;
+        
+        // Update active class in sidebar
+        const roomItems = roomList.querySelectorAll('li');
+        roomItems.forEach(item => {
+            if (Number(item.dataset.room) === Number(roomId)) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+        
+        // Clear message container and load history
+        messagesContainer.innerHTML = '';
+        if (socket) {
+            socket.emit('join_room', { roomId });
+        }
+        
+        // Close sidebar on mobile
+        if (sidebar && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+        }
     }
 
     // Socket Interactions
@@ -219,6 +288,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 3000);
             }
         });
+
+        socket.on('room_created', (room) => {
+            fetchRooms();
+        });
     }
 
     // Messaging
@@ -238,6 +311,40 @@ document.addEventListener('DOMContentLoaded', () => {
     attachBtn.addEventListener('click', () => {
         fileInput.click();
     });
+
+    if (createRoomBtn) {
+        createRoomBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const roomName = prompt('Entrez le nom du nouveau canal :');
+            if (!roomName) return;
+            const trimmedName = roomName.trim();
+            if (!trimmedName) return;
+            
+            try {
+                const res = await fetch('/api/rooms', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                    },
+                    body: JSON.stringify({ name: trimmedName })
+                });
+                
+                const textData = await res.text();
+                const data = textData ? JSON.parse(textData) : {};
+                
+                if (!res.ok) {
+                    alert(data.error || 'Erreur lors de la création du canal');
+                } else {
+                    // Switch to the newly created room
+                    switchRoom(data.id, data.name);
+                }
+            } catch (error) {
+                console.error('Erreur création canal:', error);
+                alert('Erreur de communication avec le serveur');
+            }
+        });
+    }
 
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
