@@ -33,6 +33,12 @@ Ce projet a été conçu avec une exigence rigoureuse, en combinant une architec
 - **Envoi d'Images & Prévisualisation :** Partage instantané d'images avec affichage direct et élégant dans le flux de messages.
 - **Documents & Archives :** Prise en charge des fichiers PDF, DOCX et autres documents avec bouton de téléchargement direct intégré au message.
 
+### 6. 🎙️ Messagerie Vocale Premium & Lecteur Custom (Cross-Browser)
+- **Enregistrement Haute Fidélité :** Enregistrement audio natif avec détection automatique du type MIME optimal selon le navigateur client (évitant les erreurs de codec).
+- **Lecteur Audio Événementiel Premium :** Interface minimaliste intégrée en mode sombre, contrôles ultra-réactifs et barres de progression fluides utilisant exclusivement les événements HTML5 natifs (`timeupdate`, `ended`, `play`, `pause`). Évite toute consommation inutile (zéro intervalle ou temporisateur).
+- **Bypass du bug WebM "Infinity Duration" :** Injection dynamique et calcul en temps réel de la progression temporelle à partir des métadonnées de durée enregistrées, contournant le bug natif de Chrome/Edge sur les conteneurs WebM.
+- **Chargement Asynchrone par Blob URL :** Conversion automatique à la volée des payloads Base64 volumineux en objets Blobs virtuels (`URL.createObjectURL`), garantissant une fluidité maximale et éliminant tout plantage ou erreur `NotSupportedError` du navigateur.
+
 ---
 
 ## 🛠️ Architecture Technique & Technologies
