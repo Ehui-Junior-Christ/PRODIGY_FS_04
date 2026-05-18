@@ -369,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         socket.on('chat_history', (data) => {
-            if (data.roomId === currentRoomId) {
+            if (Number(data.roomId) === Number(currentRoomId)) {
                 messagesContainer.innerHTML = '';
                 data.messages.forEach(msg => appendMessage(msg));
                 scrollToBottom();
@@ -429,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.on('room_access_denied', (data) => {
             alert(data.message);
             // Revert back to general
-            if (currentRoomId !== 1) {
+            if (Number(currentRoomId) !== 1) {
                 switchRoom(1, 'Général');
             }
         });
@@ -446,7 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         socket.on('user_typing', (data) => {
-            if (data.roomId === currentRoomId) {
+            if (Number(data.roomId) === Number(currentRoomId)) {
                 typingIndicator.classList.remove('hidden');
                 clearTimeout(typingTimeout);
                 typingTimeout = setTimeout(() => {

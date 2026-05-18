@@ -319,7 +319,8 @@ io.on('connection', async (socket) => {
     }
 
     socket.on('send_message', async (data) => {
-        let { roomId, content } = data;
+        const roomId = Number(data.roomId);
+        let { content } = data;
         
         // Optimiser l'extraction des données Base64 (Fichiers, Audio, Stickers personnalisés) vers le disque
         if (content && (content.startsWith('[FILE]:') || content.startsWith('[AUDIO]:') || content.startsWith('[STICKER]:'))) {
@@ -443,7 +444,7 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('join_room', async (data) => {
-        const { roomId } = data;
+        const roomId = Number(data.roomId);
         
         try {
             const roomRes = await db.execute({
@@ -490,8 +491,8 @@ io.on('connection', async (socket) => {
                         LEFT JOIN messages rm ON m.reply_to_id = rm.id
                         LEFT JOIN users ru ON rm.sender_id = ru.id
                         WHERE m.room_id = ? 
-                        ORDER BY m.timestamp DESC LIMIT 50
-                    ) ORDER BY timestamp ASC
+                        ORDER BY m.id DESC LIMIT 50
+                    ) ORDER BY id ASC
                 `,
                 args: [roomId]
             });
