@@ -149,8 +149,17 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUsername.textContent = currentUser.username;
         currentUserAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
 
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
+        if ('Notification' in window) {
+            if (Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }
+
+        // Enregistrer le Service Worker pour les notifications d'arrière-plan (PWA/Mobile)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker enregistré pour les notifications mobiles !'))
+                .catch(err => console.error('Erreur d\'enregistrement du Service Worker:', err));
         }
 
         connectSocket(token);
@@ -773,6 +782,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (fileType.startsWith('image/')) {
                     displayContent = `<img src="${fileData}" alt="${escapeHTML(fileName)}" style="max-width: 100%; border-radius: 8px; margin-top: 5px;">`;
+                } else if (fileType.startsWith('video/')) {
+                    displayContent = `
+                        <video src="${fileData}" controls style="max-width: 100%; max-height: 250px; border-radius: 12px; margin-top: 8px; display: block; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.3);" preload="metadata" playsinline></video>
+                    `;
                 } else {
                     displayContent = `
                         <div style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-top: 5px;">
@@ -963,17 +976,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isMentioned = msg.content && msg.content.includes(`@${currentUser.username}`);
                 const title = isMentioned ? `🔔 Mentionné par @${msg.username} dans #${roomName}` : `Nouveau message dans #${roomName}`;
                 
-                const notif = new Notification(title, {
+                const options = {
                     body: `${msg.username}: ${cleanText}`,
                     tag: `msg-${msg.room_id}`, // Group notifications per room
-                    requireInteraction: isMentioned // Mentions require user click to dismiss
-                });
-                
-                notif.onclick = () => {
-                    window.focus();
-                    switchRoom(msg.room_id, roomName);
-                    notif.close();
+                    requireInteraction: isMentioned, // Mentions require user click to dismiss
+                    icon: '/favicon.ico'
                 };
+
+                // Utiliser le Service Worker pour mobile/arrière-plan si disponible
+                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.ready.then(reg => {
+                        reg.showNotification(title, options);
+                    });
+                } else {
+                    const notif = new Notification(title, options);
+                    notif.onclick = () => {
+                        window.focus();
+                        switchRoom(msg.room_id, roomName);
+                        notif.close();
+                    };
+                }
             }
         }
     }

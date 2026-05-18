@@ -39,6 +39,13 @@ Ce projet a été conçu avec une exigence rigoureuse, en combinant une architec
 - **Bypass du bug WebM "Infinity Duration" :** Injection dynamique et calcul en temps réel de la progression temporelle à partir des métadonnées de durée enregistrées, contournant le bug natif de Chrome/Edge sur les conteneurs WebM.
 - **Chargement Asynchrone par Blob URL :** Conversion automatique à la volée des payloads Base64 volumineux en objets Blobs virtuels (`URL.createObjectURL`), garantissant une fluidité maximale et éliminant tout plantage ou erreur `NotSupportedError` du navigateur.
 
+### 7. 📲 PWA & Notifications d'Arrière-Plan Mobiles & Bureau (Service Worker)
+- **Notifications d'Arrière-Plan Persistantes :** Enregistrement automatique d'un **Service Worker** (`sw.js`) pour prendre en charge l'affichage des notifications système natives directement sur appareils mobiles (Android & iOS 16.4+) et ordinateurs de bureau, même lorsque le navigateur est fermé ou en arrière-plan.
+- **Redirection Intelligente :** Cliquer sur une notification réactive bascule instantanément l'utilisateur sur le bon canal de chat et ramène la fenêtre au premier plan de façon transparente.
+
+### 8. 🎬 Lecteur Vidéo en Ligne Intégré (Inline Video Player)
+- **Lecture Directe dans le Chat :** Détection automatique des formats vidéo partagés (`video/mp4`, `video/webm`, `video/ogg`, etc.) et affichage immédiat sous forme de lecteur vidéo HTML5 haute résolution, contrôlable et incurvé directement dans le fil de discussion sans nécessiter de téléchargement externe.
+
 ---
 
 ## 🛠️ Architecture Technique & Technologies
