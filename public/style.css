@@ -541,7 +541,55 @@ body {
     padding: 1.5rem 2rem;
     background: var(--bg-base);
     border-top: 1px solid var(--border);
+    position: relative;
 }
+
+/* Mentions Dropdown Styles */
+.mention-dropdown {
+    position: absolute;
+    bottom: calc(100% - 10px);
+    left: 2rem;
+    right: 2rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    max-height: 180px;
+    overflow-y: auto;
+    box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    display: none;
+    padding: 0.5rem 0;
+    backdrop-filter: blur(8px);
+}
+
+.mention-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.mention-item:hover, .mention-item.active {
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
+}
+
+.mention-item .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+
+.mention-item .status-dot.online {
+    background: var(--success);
+}
+
 
 #message-form {
     display: flex;

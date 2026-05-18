@@ -56,6 +56,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let audioChunks = [];
     let recordingInterval = null;
     let recordingSeconds = 0;
+    let appUsers = [];
+    let activeMentionIndex = 0;
+    let filteredUsersForMention = [];
+    let mentionAtIndex = -1;
 
     // Check Authentication on load
     const token = localStorage.getItem('prodigy_token');
@@ -162,6 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (textData) {
                     try {
                         const users = JSON.parse(textData);
+                        appUsers = users;
                         renderUsersList(users);
                     } catch(e) {
                         console.error('Erreur JSON utilisateurs:', textData);
@@ -316,18 +321,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         socket.on('new_message', (msg) => {
+            const isMentioned = msg.content && msg.content.includes(`@${currentUser.username}`);
+            
             if (Number(msg.room_id) === Number(currentRoomId)) {
                 appendMessage(msg);
                 scrollToBottom();
                 typingIndicator.classList.add('hidden');
-                if (document.hidden) {
-                    showNativeNotification(msg);
+                
+                // Play sound and show notification if message is not from self
+                if (msg.sender_id !== currentUser.id) {
+                    if (isMentioned) {
+                        playNotificationSound('mention');
+                        showNativeNotification(msg, true); // Force notification even if window is open
+                    } else if (document.hidden) {
+                        playNotificationSound('message');
+                        showNativeNotification(msg, false);
+                    }
                 }
             } else {
                 unreadCounts[msg.room_id] = (unreadCounts[msg.room_id] || 0) + 1;
                 updateRoomBadge(msg.room_id);
                 showToastNotification(msg);
-                showNativeNotification(msg);
+                
+                // Play sound and show notification if message is not from self
+                if (msg.sender_id !== currentUser.id) {
+                    if (isMentioned) {
+                        playNotificationSound('mention');
+                        showNativeNotification(msg, true);
+                    } else {
+                        playNotificationSound('message');
+                        showNativeNotification(msg, false);
+                    }
+                }
             }
         });
 
@@ -617,6 +642,113 @@ document.addEventListener('DOMContentLoaded', () => {
         if (socket) {
             socket.emit('typing', { roomId: currentRoomId });
         }
+        handleMentionInput();
+    });
+
+    messageInput.addEventListener('keydown', (e) => {
+        const dropdown = document.getElementById('mention-dropdown');
+        if (dropdown && dropdown.style.display === 'block') {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeMentionIndex = (activeMentionIndex + 1) % filteredUsersForMention.length;
+                renderMentionDropdown();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeMentionIndex = (activeMentionIndex - 1 + filteredUsersForMention.length) % filteredUsersForMention.length;
+                renderMentionDropdown();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (filteredUsersForMention[activeMentionIndex]) {
+                    selectMentionUser(filteredUsersForMention[activeMentionIndex].username);
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                hideMentionDropdown();
+            }
+        }
+    });
+
+    function handleMentionInput() {
+        const selectionStart = messageInput.selectionStart;
+        const textBeforeCursor = messageInput.value.substring(0, selectionStart);
+        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+        
+        if (lastAtIndex !== -1) {
+            const queryText = textBeforeCursor.substring(lastAtIndex + 1);
+            // Mentions should not contain spaces (username only)
+            if (!queryText.includes(' ')) {
+                mentionAtIndex = lastAtIndex;
+                const query = queryText.toLowerCase();
+                
+                // Filter users (excluding ourselves)
+                filteredUsersForMention = appUsers.filter(user => 
+                    user.username.toLowerCase().includes(query) && 
+                    user.id !== currentUser.id
+                );
+                
+                if (filteredUsersForMention.length > 0) {
+                    activeMentionIndex = 0;
+                    renderMentionDropdown();
+                    return;
+                }
+            }
+        }
+        hideMentionDropdown();
+    }
+
+    function renderMentionDropdown() {
+        const dropdown = document.getElementById('mention-dropdown');
+        if (!dropdown) return;
+        
+        dropdown.innerHTML = '';
+        filteredUsersForMention.forEach((user, index) => {
+            const item = document.createElement('div');
+            item.className = `mention-item ${index === activeMentionIndex ? 'active' : ''}`;
+            item.innerHTML = `
+                <span class="status-dot ${user.status === 'online' ? 'online' : ''}"></span>
+                <span>${escapeHTML(user.username)}</span>
+            `;
+            item.addEventListener('click', () => {
+                selectMentionUser(user.username);
+            });
+            dropdown.appendChild(item);
+        });
+        dropdown.style.display = 'block';
+    }
+
+    function selectMentionUser(username) {
+        if (mentionAtIndex === -1) return;
+        
+        const value = messageInput.value;
+        const before = value.substring(0, mentionAtIndex);
+        const after = value.substring(messageInput.selectionStart);
+        
+        messageInput.value = `${before}@${username} ${after}`;
+        messageInput.focus();
+        
+        // Move selection range/cursor right after the completed mention name
+        const newCursorPos = before.length + username.length + 2; // +2 for @ and trailing space
+        messageInput.setSelectionRange(newCursorPos, newCursorPos);
+        
+        hideMentionDropdown();
+    }
+
+    function hideMentionDropdown() {
+        const dropdown = document.getElementById('mention-dropdown');
+        if (dropdown) {
+            dropdown.style.display = 'none';
+        }
+        filteredUsersForMention = [];
+        activeMentionIndex = 0;
+        mentionAtIndex = -1;
+    }
+
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('mention-dropdown');
+        if (dropdown && !messageInput.contains(e.target) && !dropdown.contains(e.target)) {
+            hideMentionDropdown();
+        }
     });
 
     function appendMessage(msg) {
@@ -811,20 +943,86 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     }
 
-    function showNativeNotification(msg) {
+    function showNativeNotification(msg, force = false) {
         if ('Notification' in window && Notification.permission === 'granted') {
-            const roomLi = roomList.querySelector(`li[data-room="${msg.room_id}"]`);
-            const roomName = roomLi ? roomLi.textContent.replace(/#\s*/, '').replace(/\s*\d+$/, '') : `Canal ${msg.room_id}`;
-            
-            let cleanText = msg.content;
-            if (cleanText.startsWith('[FILE]:')) {
-                cleanText = "📎 Fichier joint";
+            // Only show if page is hidden OR if forced (like an active mention in another channel/tab)
+            if (document.hidden || force) {
+                const roomLi = roomList.querySelector(`li[data-room="${msg.room_id}"]`);
+                const roomName = roomLi ? roomLi.textContent.replace(/#\s*/, '').replace(/\s*\d+$/, '') : `Canal ${msg.room_id}`;
+                
+                let cleanText = msg.content;
+                if (cleanText.startsWith('[FILE]:')) {
+                    cleanText = "📎 Fichier joint";
+                }
+                
+                const isMentioned = msg.content && msg.content.includes(`@${currentUser.username}`);
+                const title = isMentioned ? `🔔 Mentionné par @${msg.username} dans #${roomName}` : `Nouveau message dans #${roomName}`;
+                
+                const notif = new Notification(title, {
+                    body: `${msg.username}: ${cleanText}`,
+                    tag: `msg-${msg.room_id}`, // Group notifications per room
+                    requireInteraction: isMentioned // Mentions require user click to dismiss
+                });
+                
+                notif.onclick = () => {
+                    window.focus();
+                    switchRoom(msg.room_id, roomName);
+                    notif.close();
+                };
             }
+        }
+    }
+
+    function playNotificationSound(type = 'message') {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
             
-            new Notification(`Nouveau message dans #${roomName}`, {
-                body: `${msg.username}: ${cleanText}`,
-                icon: '/favicon.ico'
-            });
+            if (type === 'mention') {
+                // Elegant double chime synth sound for mentions (G6 followed by C7)
+                const now = ctx.currentTime;
+                
+                const osc1 = ctx.createOscillator();
+                const gain1 = ctx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(1567.98, now); // G6
+                gain1.gain.setValueAtTime(0, now);
+                gain1.gain.linearRampToValueAtTime(0.12, now + 0.04);
+                gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                osc1.connect(gain1);
+                gain1.connect(ctx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.4);
+                
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(2093.00, now + 0.12); // C7
+                gain2.gain.setValueAtTime(0, now + 0.12);
+                gain2.gain.linearRampToValueAtTime(0.12, now + 0.16);
+                gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.start(now + 0.12);
+                osc2.stop(now + 0.52);
+            } else {
+                // Soft single chime synth sound for normal messages (E6)
+                const now = ctx.currentTime;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1318.51, now); // E6
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.08, now + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            }
+        } catch (e) {
+            console.warn('Web Audio playback blocked or unsupported', e);
         }
     }
 
