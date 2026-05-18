@@ -1069,11 +1069,13 @@ body {
     border-radius: 12px;
     cursor: pointer;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     color: var(--text-secondary);
     transition: all 0.2s ease;
     min-height: 60px;
+    padding: 8px 4px;
 }
 
 .sticker-item.add-custom-sticker:hover {

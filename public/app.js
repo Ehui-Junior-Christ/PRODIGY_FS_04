@@ -1397,56 +1397,242 @@ document.addEventListener('DOMContentLoaded', () => {
         const grid = stickerPopover.querySelector('#sticker-grid');
         if (grid) {
             if (activeStickerTab === 'custom') {
-                // Ensure upload file input exists
+                // ========== INDEXEDDB STORAGE FOR STICKERS (NO SIZE LIMIT) ==========
+                const DB_NAME = 'ProdigyStickerDB';
+                const DB_VERSION = 1;
+                const STORE_NAME = 'custom_stickers';
+
+                function getDB() {
+                    return new Promise((resolve, reject) => {
+                        const request = indexedDB.open(DB_NAME, DB_VERSION);
+                        request.onupgradeneeded = (e) => {
+                            const db = e.target.result;
+                            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                                db.createObjectStore(STORE_NAME, { autoIncrement: true });
+                            }
+                        };
+                        request.onsuccess = (e) => resolve(e.target.result);
+                        request.onerror = (e) => reject(e.target.error);
+                    });
+                }
+
+                async function getAllCustomStickers() {
+                    try {
+                        const db = await getDB();
+                        return new Promise((resolve, reject) => {
+                            const transaction = db.transaction(STORE_NAME, 'readonly');
+                            const store = transaction.objectStore(STORE_NAME);
+                            const request = store.openCursor();
+                            const stickers = [];
+                            request.onsuccess = (e) => {
+                                const cursor = e.target.result;
+                                if (cursor) {
+                                    stickers.push({ id: cursor.key, url: cursor.value });
+                                    cursor.continue();
+                                } else {
+                                    resolve(stickers);
+                                }
+                            };
+                            request.onerror = (e) => reject(e.target.error);
+                        });
+                    } catch (e) {
+                        console.error("IndexedDB error:", e);
+                        return [];
+                    }
+                }
+
+                async function addCustomSticker(url) {
+                    try {
+                        const db = await getDB();
+                        return new Promise((resolve, reject) => {
+                            const transaction = db.transaction(STORE_NAME, 'readwrite');
+                            const store = transaction.objectStore(STORE_NAME);
+                            const request = store.add(url);
+                            request.onsuccess = () => resolve();
+                            request.onerror = (e) => reject(e.target.error);
+                        });
+                    } catch (e) {
+                        console.error("IndexedDB error:", e);
+                    }
+                }
+
+                async function deleteCustomStickerById(id) {
+                    try {
+                        const db = await getDB();
+                        return new Promise((resolve, reject) => {
+                            const transaction = db.transaction(STORE_NAME, 'readwrite');
+                            const store = transaction.objectStore(STORE_NAME);
+                            const request = store.delete(id);
+                            request.onsuccess = () => resolve();
+                            request.onerror = (e) => reject(e.target.error);
+                        });
+                    } catch (e) {
+                        console.error("IndexedDB error:", e);
+                    }
+                }
+
+                function showFeedbackToast(text, isError = false) {
+                    const toastContainer = document.getElementById('toast-container');
+                    if (!toastContainer) return;
+                    const toast = document.createElement('div');
+                    toast.className = 'toast';
+                    toast.style.background = isError ? 'var(--error)' : 'var(--success)';
+                    toast.style.color = 'white';
+                    toast.style.padding = '0.75rem 1.25rem';
+                    toast.style.borderRadius = '12px';
+                    toast.style.boxShadow = '0 10px 20px rgba(0,0,0,0.3)';
+                    toast.innerHTML = `<div class="toast-content" style="gap: 0px;"><div class="toast-text">${text}</div></div>`;
+                    toast.addEventListener('click', () => toast.remove());
+                    toastContainer.appendChild(toast);
+                    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
+                }
+
+                // Ensure upload file inputs exist
                 let customStickerInput = document.getElementById('custom-sticker-input');
                 if (!customStickerInput) {
                     customStickerInput = document.createElement('input');
                     customStickerInput.type = 'file';
                     customStickerInput.id = 'custom-sticker-input';
                     customStickerInput.className = 'hidden';
+                    customStickerInput.multiple = true;
                     customStickerInput.accept = 'image/png, image/gif, image/jpeg, image/webp';
                     document.body.appendChild(customStickerInput);
-                    customStickerInput.addEventListener('change', handleCustomStickerUpload);
+                    customStickerInput.addEventListener('change', (e) => handleCustomStickersUpload(e.target.files));
                 }
 
-                // Render "+ Ajouter" dashed button
-                const addBtn = document.createElement('div');
-                addBtn.className = 'sticker-item add-custom-sticker';
-                addBtn.title = 'Ajouter votre propre sticker (GIF, PNG...)';
-                addBtn.innerHTML = `
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                let customStickerFolderInput = document.getElementById('custom-sticker-folder-input');
+                if (!customStickerFolderInput) {
+                    customStickerFolderInput = document.createElement('input');
+                    customStickerFolderInput.type = 'file';
+                    customStickerFolderInput.id = 'custom-sticker-folder-input';
+                    customStickerFolderInput.className = 'hidden';
+                    customStickerFolderInput.webkitdirectory = true;
+                    customStickerFolderInput.directory = true;
+                    document.body.appendChild(customStickerFolderInput);
+                    customStickerFolderInput.addEventListener('change', (e) => handleCustomStickersUpload(e.target.files));
+                }
+
+                // Render "+ Fichiers" dashed button
+                const addFilesBtn = document.createElement('div');
+                addFilesBtn.className = 'sticker-item add-custom-sticker';
+                addFilesBtn.title = 'Sélectionner plusieurs images (Max 2 Mo par fichier)';
+                addFilesBtn.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span style="font-size: 0.65rem; margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Fichiers</span>
                 `;
-                addBtn.addEventListener('click', () => {
+                addFilesBtn.addEventListener('click', () => {
                     customStickerInput.click();
                 });
-                grid.appendChild(addBtn);
+                grid.appendChild(addFilesBtn);
 
-                // Render user custom stickers
-                const customStickers = JSON.parse(localStorage.getItem('prodigy_custom_stickers') || '[]');
-                customStickers.forEach((stickerUrl, idx) => {
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'sticker-item-wrapper';
-                    
-                    const item = document.createElement('div');
-                    item.className = 'sticker-item';
-                    item.innerHTML = `<img src="${stickerUrl}" alt="Custom Sticker" loading="lazy" referrerpolicy="no-referrer">`;
-                    item.addEventListener('click', () => {
-                        sendSticker(stickerUrl);
-                    });
-                    
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'delete-sticker-btn';
-                    deleteBtn.innerHTML = '×';
-                    deleteBtn.title = 'Supprimer de ma bibliothèque';
-                    deleteBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        deleteCustomSticker(idx);
-                    });
-                    
-                    wrapper.appendChild(item);
-                    wrapper.appendChild(deleteBtn);
-                    grid.appendChild(wrapper);
+                // Render "📂 Dossier" dashed button
+                const addFolderBtn = document.createElement('div');
+                addFolderBtn.className = 'sticker-item add-custom-sticker';
+                addFolderBtn.title = 'Importer un dossier complet de stickers';
+                addFolderBtn.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <span style="font-size: 0.65rem; margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Dossier</span>
+                `;
+                addFolderBtn.addEventListener('click', () => {
+                    customStickerFolderInput.click();
                 });
+                grid.appendChild(addFolderBtn);
+
+                // Render user custom stickers from IndexedDB
+                getAllCustomStickers().then(customStickers => {
+                    customStickers.forEach((sticker) => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'sticker-item-wrapper';
+                        
+                        const item = document.createElement('div');
+                        item.className = 'sticker-item';
+                        item.innerHTML = `<img src="${sticker.url}" alt="Custom Sticker" loading="lazy" referrerpolicy="no-referrer">`;
+                        item.addEventListener('click', () => {
+                            sendSticker(sticker.url);
+                        });
+                        
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'delete-sticker-btn';
+                        deleteBtn.innerHTML = '×';
+                        deleteBtn.title = 'Supprimer de ma bibliothèque';
+                        deleteBtn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            await deleteCustomStickerById(sticker.id);
+                            renderStickerPopover();
+                        });
+                        
+                        wrapper.appendChild(item);
+                        wrapper.appendChild(deleteBtn);
+                        grid.appendChild(wrapper);
+                    });
+                });
+
+                // Helper to upload files
+                async function handleCustomStickersUpload(files) {
+                    if (!files || files.length === 0) return;
+                    
+                    let loadedCount = 0;
+                    let limitExceeded = false;
+                    
+                    if (files.length > 5) {
+                        showFeedbackToast(`Importation de ${files.length} stickers en cours...`);
+                    }
+
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        if (!file.type.startsWith('image/')) continue;
+                        
+                        // limit to 2MB (2 * 1024 * 1024 bytes)
+                        if (file.size > 2 * 1024 * 1024) {
+                            limitExceeded = true;
+                            continue;
+                        }
+
+                        await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onload = async function(evt) {
+                                const dataUrl = evt.target.result;
+                                await addCustomSticker(dataUrl);
+                                loadedCount++;
+                                resolve();
+                            };
+                            reader.onerror = () => resolve();
+                            reader.readAsDataURL(file);
+                        });
+                    }
+                    
+                    if (limitExceeded) {
+                        showFeedbackToast('Certains stickers dépassaient la limite de 2 Mo et ont été ignorés.', true);
+                    }
+                    if (loadedCount > 0) {
+                        showFeedbackToast(`${loadedCount} sticker(s) ajouté(s) à votre bibliothèque !`);
+                        renderStickerPopover();
+                    }
+                    
+                    if (customStickerInput) customStickerInput.value = '';
+                    if (customStickerFolderInput) customStickerFolderInput.value = '';
+                }
+
+                // Migrate old localStorage custom stickers to IndexedDB if they exist
+                const oldStickers = localStorage.getItem('prodigy_custom_stickers');
+                if (oldStickers) {
+                    try {
+                        const array = JSON.parse(oldStickers);
+                        if (Array.isArray(array) && array.length > 0) {
+                            (async () => {
+                                for (const url of array) {
+                                    await addCustomSticker(url);
+                                }
+                                localStorage.removeItem('prodigy_custom_stickers');
+                                renderStickerPopover();
+                            })();
+                        } else {
+                            localStorage.removeItem('prodigy_custom_stickers');
+                        }
+                    } catch (err) {
+                        console.error("Migration error:", err);
+                    }
+                }
             } else {
                 const currentPack = stickerPacks[activeStickerTab] || [];
                 currentPack.forEach(sticker => {
@@ -1461,37 +1647,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         }
-    }
-
-    function handleCustomStickerUpload(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        // limit to 400KB to make sure we don't hit localStorage limits easily
-        if (file.size > 400 * 1024) {
-            alert('L\'image est trop volumineuse pour un sticker. Choisissez une image de moins de 400 Ko.');
-            e.target.value = '';
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-            const dataUrl = evt.target.result;
-            const customStickers = JSON.parse(localStorage.getItem('prodigy_custom_stickers') || '[]');
-            customStickers.push(dataUrl);
-            localStorage.setItem('prodigy_custom_stickers', JSON.stringify(customStickers));
-            
-            renderStickerPopover();
-            e.target.value = '';
-        };
-        reader.readAsDataURL(file);
-    }
-
-    function deleteCustomSticker(index) {
-        const customStickers = JSON.parse(localStorage.getItem('prodigy_custom_stickers') || '[]');
-        customStickers.splice(index, 1);
-        localStorage.setItem('prodigy_custom_stickers', JSON.stringify(customStickers));
-        renderStickerPopover();
     }
 
     function sendSticker(stickerUrl) {
