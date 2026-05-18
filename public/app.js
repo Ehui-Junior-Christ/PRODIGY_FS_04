@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
     const logoutBtn = document.getElementById('logout-btn');
+    const menuToggleBtn = document.getElementById('menu-toggle-btn');
+    const sidebar = document.querySelector('.sidebar');
     
     const messagesContainer = document.getElementById('messages-container');
     const messageForm = document.getElementById('message-form');
@@ -319,5 +321,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    // Toggle menu event listeners
+    if (menuToggleBtn && sidebar) {
+        menuToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.classList.toggle('open');
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggleBtn) {
+                sidebar.classList.remove('open');
+            }
+        });
     }
 });

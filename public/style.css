@@ -536,3 +536,71 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-secondary);
 }
+
+/* Responsive / Mobile Styles */
+@media (max-width: 768px) {
+    .menu-toggle-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 0.75rem;
+        background: var(--bg-surface-hover);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        width: 40px;
+        height: 40px;
+        flex-shrink: 0;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: -320px;
+        bottom: 0;
+        z-index: 1000;
+        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 20px 0 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .sidebar.open {
+        left: 0;
+    }
+
+    .auth-card {
+        padding: 2rem 1.5rem;
+        margin: 1rem;
+        max-width: 90%;
+    }
+
+    .brand-title {
+        font-size: 2rem;
+    }
+
+    .messages-container {
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .message {
+        max-width: 92%;
+    }
+
+    .chat-header {
+        padding: 1rem;
+    }
+
+    .chat-input-area {
+        padding: 1rem;
+    }
+
+    #message-form {
+        padding: 0.25rem;
+        border-radius: 12px;
+    }
+
+    #message-input {
+        padding: 0.5rem;
+        font-size: 0.95rem;
+    }
+}
+
