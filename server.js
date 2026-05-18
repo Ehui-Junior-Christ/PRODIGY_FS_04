@@ -68,7 +68,7 @@ async function initDb() {
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
 
-        // Nettoyage automatique des messages de plus de 24h
+        // Nettoyage automatique des messages de plus de 24h et des fichiers associés sur disque
         setInterval(async () => {
             try {
                 const res = await db.execute(`DELETE FROM messages WHERE timestamp < datetime('now', '-24 hours')`);
@@ -76,12 +76,38 @@ async function initDb() {
                     console.log(`[Nettoyage 24h] ${res.rowsAffected} message(s) supprimé(s).`);
                     io.emit('messages_cleaned');
                 }
-            } catch(e) {}
+                
+                // Supprimer les fichiers physiques correspondants
+                const fs = require('fs');
+                const uploadsDir = path.join(__dirname, 'public', 'uploads');
+                if (fs.existsSync(uploadsDir)) {
+                    const files = fs.readdirSync(uploadsDir);
+                    const now = Date.now();
+                    const oneDay = 24 * 60 * 60 * 1000;
+                    files.forEach(file => {
+                        const filePath = path.join(uploadsDir, file);
+                        const stat = fs.statSync(filePath);
+                        if (now - stat.mtimeMs > oneDay) {
+                            fs.unlinkSync(filePath);
+                            console.log(`[Nettoyage Fichiers] Fichier supprimé car obsolète (>24h) : ${file}`);
+                        }
+                    });
+                }
+            } catch(e) {
+                console.error("Erreur lors du nettoyage périodique :", e);
+            }
         }, 10 * 60 * 1000);
         
         setTimeout(async () => {
             try { await db.execute(`DELETE FROM messages WHERE timestamp < datetime('now', '-24 hours')`); } catch(e){}
         }, 5000);
+
+        // S'assurer du répertoire d'uploads
+        const fs = require('fs');
+        const uploadsDir = path.join(__dirname, 'public', 'uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
 
         console.log('Connecté à la base de données (Turso/SQLite).');
     } catch (err) {
@@ -283,7 +309,83 @@ io.on('connection', async (socket) => {
     }
 
     socket.on('send_message', async (data) => {
-        const { roomId, content } = data;
+        let { roomId, content } = data;
+        
+        // Optimiser l'extraction des données Base64 (Fichiers, Audio, Stickers personnalisés) vers le disque
+        if (content && (content.startsWith('[FILE]:') || content.startsWith('[AUDIO]:') || content.startsWith('[STICKER]:'))) {
+            try {
+                const isAudio = content.startsWith('[AUDIO]:');
+                const isSticker = content.startsWith('[STICKER]:');
+                const isFile = content.startsWith('[FILE]:');
+                
+                let base64Data = '';
+                let prefix = '';
+                
+                if (isSticker) {
+                    prefix = '[STICKER]:';
+                    base64Data = content.substring(prefix.length);
+                } else if (isAudio) {
+                    prefix = '[AUDIO]:';
+                    const parts = content.substring(prefix.length).split('|');
+                    base64Data = parts[3];
+                } else if (isFile) {
+                    prefix = '[FILE]:';
+                    const parts = content.substring(prefix.length).split('|');
+                    base64Data = parts[2];
+                }
+                
+                if (base64Data && base64Data.startsWith('data:')) {
+                    const match = base64Data.match(/^data:([^;]+);base64,(.+)$/);
+                    if (match) {
+                        const fileType = match[1];
+                        const rawBase64 = match[2];
+                        const buffer = Buffer.from(rawBase64, 'base64');
+                        
+                        const fs = require('fs');
+                        const uploadsDir = path.join(__dirname, 'public', 'uploads');
+                        if (!fs.existsSync(uploadsDir)) {
+                            fs.mkdirSync(uploadsDir, { recursive: true });
+                        }
+                        
+                        // Déterminer l'extension
+                        let ext = '.bin';
+                        if (fileType.includes('png')) ext = '.png';
+                        else if (fileType.includes('gif')) ext = '.gif';
+                        else if (fileType.includes('jpeg') || fileType.includes('jpg')) ext = '.jpg';
+                        else if (fileType.includes('webp')) ext = '.webp';
+                        else if (fileType.includes('webm')) ext = '.webm';
+                        else if (fileType.includes('mp4')) ext = '.mp4';
+                        else if (fileType.includes('wav')) ext = '.wav';
+                        
+                        let originalName = 'file';
+                        if (isFile || isAudio) {
+                            const parts = content.substring(prefix.length).split('|');
+                            originalName = parts[0];
+                        }
+                        const cleanName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+                        const uniqueName = Date.now() + '_' + Math.random().toString(36).substring(2, 9) + '_' + cleanName;
+                        
+                        const filePath = path.join(uploadsDir, uniqueName);
+                        fs.writeFileSync(filePath, buffer);
+                        
+                        const relativeUrl = `/uploads/${uniqueName}`;
+                        
+                        if (isSticker) {
+                            content = `[STICKER]:${relativeUrl}`;
+                        } else if (isAudio) {
+                            const parts = content.substring(prefix.length).split('|');
+                            content = `[AUDIO]:${parts[0]}|${parts[1]}|${parts[2]}|${relativeUrl}`;
+                        } else if (isFile) {
+                            const parts = content.substring(prefix.length).split('|');
+                            content = `[FILE]:${parts[0]}|${parts[1]}|${relativeUrl}`;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Erreur d'extraction Base64 sur le serveur :", err);
+            }
+        }
+
         try {
             const result = await db.execute({
                 sql: `INSERT INTO messages (room_id, sender_id, content) VALUES (?, ?, ?)`,
