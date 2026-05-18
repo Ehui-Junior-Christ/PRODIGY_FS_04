@@ -72,7 +72,7 @@ async function initDb() {
         // Nettoyage périodique automatique toutes les 10 minutes des messages et fichiers vieux de plus de 24 heures (GMT / Côte d'Ivoire)
         setInterval(async () => {
             try {
-                const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
                 
                 // 1. Récupérer les messages qui vont être supprimés pour repérer leurs fichiers physiques
                 const filesToClean = await db.execute({
@@ -415,9 +415,10 @@ io.on('connection', async (socket) => {
         }
 
         try {
+            const standardTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
             const result = await db.execute({
                 sql: `INSERT INTO messages (room_id, sender_id, content, timestamp, reply_to_id) VALUES (?, ?, ?, ?, ?)`,
-                args: [roomId, userId, content, new Date().toISOString(), replyToId]
+                args: [roomId, userId, content, standardTimestamp, replyToId]
             });
             
             const messageData = {
@@ -425,7 +426,7 @@ io.on('connection', async (socket) => {
                 room_id: roomId,
                 sender_id: userId,
                 content,
-                timestamp: new Date().toISOString(),
+                timestamp: standardTimestamp,
                 username: socket.user.username,
                 reply_to_id: replyToId,
                 reply_username: replyUsername,
@@ -477,15 +478,17 @@ io.on('connection', async (socket) => {
         try {
             const result = await db.execute({
                 sql: `
-                    SELECT m.*, u.username,
-                           rm.content AS reply_content,
-                           ru.username AS reply_username
-                    FROM messages m 
-                    JOIN users u ON m.sender_id = u.id 
-                    LEFT JOIN messages rm ON m.reply_to_id = rm.id
-                    LEFT JOIN users ru ON rm.sender_id = ru.id
-                    WHERE m.room_id = ? 
-                    ORDER BY m.timestamp ASC LIMIT 50
+                    SELECT * FROM (
+                        SELECT m.*, u.username,
+                               rm.content AS reply_content,
+                               ru.username AS reply_username
+                        FROM messages m 
+                        JOIN users u ON m.sender_id = u.id 
+                        LEFT JOIN messages rm ON m.reply_to_id = rm.id
+                        LEFT JOIN users ru ON rm.sender_id = ru.id
+                        WHERE m.room_id = ? 
+                        ORDER BY m.timestamp DESC LIMIT 50
+                    ) ORDER BY timestamp ASC
                 `,
                 args: [roomId]
             });
