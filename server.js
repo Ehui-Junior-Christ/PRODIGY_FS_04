@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -17,8 +18,14 @@ const JWT_SECRET = 'super_secret_prodigy_key_2026';
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Ensure .data directory exists for persistent storage on free hosts like Glitch
+const dataDir = path.join(__dirname, '.data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir);
+}
+
 // Database Setup
-const db = new sqlite3.Database('./chat.db', (err) => {
+const db = new sqlite3.Database(path.join(dataDir, 'chat.db'), (err) => {
     if (err) console.error('Erreur de connexion à la base de données:', err.message);
     else console.log('Connecté à la base de données SQLite.');
 });
