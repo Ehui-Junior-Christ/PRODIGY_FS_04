@@ -1358,6 +1358,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 stickerPopover.style.display = 'none';
             }
         });
+
+        // Prevent closing when clicking inside popover
+        stickerPopover.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
     }
 
     function renderStickerPopover() {
