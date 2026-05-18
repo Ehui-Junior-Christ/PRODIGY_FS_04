@@ -208,7 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let online = 0;
         
         users.forEach(user => {
-            if (user.id === currentUser.id) return; // Skip self
+            if (user.id === currentUser.id || user.role === 'admin') return; // Skip self & admins
             
             if (user.status === 'online') online++;
             
@@ -221,7 +221,8 @@ document.addEventListener('DOMContentLoaded', () => {
             usersList.appendChild(li);
         });
         
-        onlineCount.textContent = online + 1; // +1 for current user
+        const currentIsAdmin = currentUser && currentUser.role === 'admin';
+        onlineCount.textContent = online + (currentIsAdmin ? 0 : 1);
     }
 
     async function fetchRooms() {
@@ -1034,7 +1035,7 @@ document.addEventListener('DOMContentLoaded', () => {
         div.className = `message message-row ${isSelf ? 'self' : ''}`;
         
         let deleteBtnHtml = '';
-        if (currentUser && (currentUser.role === 'admin' || msg.sender_id === currentUser.id)) {
+        if (currentUser && currentUser.role === 'admin') {
             deleteBtnHtml = `
                 <button class="delete-msg-btn" title="Supprimer le message" style="background: none; border: none; color: var(--error); opacity: 0.6; cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: opacity 0.2s ease;" onclick="window.deleteMessage(${msg.id})">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>

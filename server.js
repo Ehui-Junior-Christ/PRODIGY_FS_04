@@ -384,9 +384,9 @@ app.delete('/api/messages/:id', authenticateToken, async (req, res) => {
         const msg = msgRes.rows[0];
         if (!msg) return res.status(404).json({ error: "Message introuvable" });
 
-        // Allowed if user is admin OR if user is the sender of the message
-        if (req.user.role !== 'admin' && Number(msg.sender_id) !== Number(req.user.id)) {
-            return res.status(403).json({ error: "Action non autorisée." });
+        // Allowed ONLY if user is admin
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: "Action non autorisée. Seuls les administrateurs peuvent supprimer les messages." });
         }
 
         // Delete from database
