@@ -19,7 +19,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_prodigy_key_2026';
 // Middleware
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+    maxAge: '1d', // Cacher les ressources statiques pendant 1 jour pour un chargement instantané
+    etag: true
+}));
 
 // Database Setup (Turso / libSQL)
 const dbUrl = process.env.TURSO_DATABASE_URL || 'file:./chat.db';
