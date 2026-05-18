@@ -30,8 +30,10 @@ Ce projet a été conçu avec une exigence rigoureuse, en combinant une architec
 - **Compteur en Temps Réel :** Affichage en direct du nombre total de membres actifs présents sur la plateforme.
 
 ### 5. 📎 Partage de Fichiers & Médias (File Sharing)
+- **Capacité de Téléversement Élargie (15 Mo) :** Supporte l'envoi de documents volumineux, photos haute résolution et vidéos jusqu'à **15 Mo**. Le serveur utilise un buffer de 25 Mo pour prendre en charge l'overhead d'encodage base64 sans coupure.
 - **Envoi d'Images & Prévisualisation :** Partage instantané d'images avec affichage direct et élégant dans le flux de messages.
 - **Documents & Archives :** Prise en charge des fichiers PDF, DOCX et autres documents avec bouton de téléchargement direct intégré au message.
+- **Défilement Intelligent & Instantané (Scroll-to-Bottom) :** Dès qu'un message est reçu ou qu'un média (image, sticker, vidéo) termine son chargement sur n'importe quel appareil, le fil de discussion défile automatiquement vers le bas de façon fluide, garantissant une visibilité instantanée et parfaite du nouveau message.
 
 ### 6. 🎙️ Messagerie Vocale Premium & Lecteur Custom (Cross-Browser)
 - **Enregistrement Haute Fidélité :** Enregistrement audio natif avec détection automatique du type MIME optimal selon le navigateur client (évitant les erreurs de codec).

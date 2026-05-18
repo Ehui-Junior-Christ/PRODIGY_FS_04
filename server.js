@@ -9,13 +9,16 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    maxHttpBufferSize: 25 * 1024 * 1024 // Limite à 25 Mo pour supporter les fichiers encodés en base64 de 15 Mo
+});
 
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_prodigy_key_2026';
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Database Setup (Turso / libSQL)

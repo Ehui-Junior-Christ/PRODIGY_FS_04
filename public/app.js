@@ -629,9 +629,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const file = e.target.files[0];
         if (!file || !socket) return;
 
-        // Limit file size to 2MB for base64 transmission
-        if (file.size > 2 * 1024 * 1024) {
-            alert('Le fichier est trop volumineux (max 2MB)');
+        // Limiter la taille du fichier à 15 Mo pour la transmission
+        if (file.size > 15 * 1024 * 1024) {
+            alert('Le fichier est trop volumineux (max 15 Mo).');
             return;
         }
 
@@ -874,10 +874,20 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         
         messagesContainer.appendChild(div);
+
+        // Attacher des écouteurs sur les médias pour forcer le défilement complet dès qu'ils finissent de charger !
+        const mediaElements = div.querySelectorAll('img, video');
+        mediaElements.forEach(media => {
+            media.addEventListener('load', scrollToBottom);
+            media.addEventListener('loadeddata', scrollToBottom);
+        });
     }
 
     function scrollToBottom() {
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        // Utilisation d'un court délai pour s'assurer du rendu complet de la hauteur du conteneur (très important sur mobile)
+        setTimeout(() => {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 50);
     }
 
     function escapeHTML(str) {
