@@ -1219,6 +1219,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button class="sticker-tab ${activeStickerTab === 'reactions' ? 'active' : ''}" data-tab="reactions">🔥 Réactions</button>
                 <button class="sticker-tab ${activeStickerTab === 'animals' ? 'active' : ''}" data-tab="animals">🦄 Animaux</button>
                 <button class="sticker-tab ${activeStickerTab === 'geek' ? 'active' : ''}" data-tab="geek">👾 Geek & Fun</button>
+                <button class="sticker-tab ${activeStickerTab === 'custom' ? 'active' : ''}" data-tab="custom">✨ Mes Stickers</button>
             </div>
             <div class="sticker-grid" id="sticker-grid"></div>
         `;
@@ -1235,20 +1236,102 @@ document.addEventListener('DOMContentLoaded', () => {
         // Render grid items
         const grid = stickerPopover.querySelector('#sticker-grid');
         if (grid) {
-            const currentPack = stickerPacks[activeStickerTab] || [];
-            currentPack.forEach(sticker => {
-                const item = document.createElement('div');
-                item.className = 'sticker-item';
-                item.title = sticker.name;
-                item.innerHTML = `<img src="${sticker.url}" alt="${sticker.name}" loading="lazy" referrerpolicy="no-referrer">`;
-                
-                item.addEventListener('click', () => {
-                    sendSticker(sticker.url);
+            if (activeStickerTab === 'custom') {
+                // Ensure upload file input exists
+                let customStickerInput = document.getElementById('custom-sticker-input');
+                if (!customStickerInput) {
+                    customStickerInput = document.createElement('input');
+                    customStickerInput.type = 'file';
+                    customStickerInput.id = 'custom-sticker-input';
+                    customStickerInput.className = 'hidden';
+                    customStickerInput.accept = 'image/png, image/gif, image/jpeg, image/webp';
+                    document.body.appendChild(customStickerInput);
+                    customStickerInput.addEventListener('change', handleCustomStickerUpload);
+                }
+
+                // Render "+ Ajouter" dashed button
+                const addBtn = document.createElement('div');
+                addBtn.className = 'sticker-item add-custom-sticker';
+                addBtn.title = 'Ajouter votre propre sticker (GIF, PNG...)';
+                addBtn.innerHTML = `
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                `;
+                addBtn.addEventListener('click', () => {
+                    customStickerInput.click();
                 });
-                
-                grid.appendChild(item);
-            });
+                grid.appendChild(addBtn);
+
+                // Render user custom stickers
+                const customStickers = JSON.parse(localStorage.getItem('prodigy_custom_stickers') || '[]');
+                customStickers.forEach((stickerUrl, idx) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'sticker-item-wrapper';
+                    
+                    const item = document.createElement('div');
+                    item.className = 'sticker-item';
+                    item.innerHTML = `<img src="${stickerUrl}" alt="Custom Sticker" loading="lazy" referrerpolicy="no-referrer">`;
+                    item.addEventListener('click', () => {
+                        sendSticker(stickerUrl);
+                    });
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'delete-sticker-btn';
+                    deleteBtn.innerHTML = '×';
+                    deleteBtn.title = 'Supprimer de ma bibliothèque';
+                    deleteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteCustomSticker(idx);
+                    });
+                    
+                    wrapper.appendChild(item);
+                    wrapper.appendChild(deleteBtn);
+                    grid.appendChild(wrapper);
+                });
+            } else {
+                const currentPack = stickerPacks[activeStickerTab] || [];
+                currentPack.forEach(sticker => {
+                    const item = document.createElement('div');
+                    item.className = 'sticker-item';
+                    item.title = sticker.name;
+                    item.innerHTML = `<img src="${sticker.url}" alt="${sticker.name}" loading="lazy" referrerpolicy="no-referrer">`;
+                    item.addEventListener('click', () => {
+                        sendSticker(sticker.url);
+                    });
+                    grid.appendChild(item);
+                });
+            }
         }
+    }
+
+    function handleCustomStickerUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        // limit to 400KB to make sure we don't hit localStorage limits easily
+        if (file.size > 400 * 1024) {
+            alert('L\'image est trop volumineuse pour un sticker. Choisissez une image de moins de 400 Ko.');
+            e.target.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            const dataUrl = evt.target.result;
+            const customStickers = JSON.parse(localStorage.getItem('prodigy_custom_stickers') || '[]');
+            customStickers.push(dataUrl);
+            localStorage.setItem('prodigy_custom_stickers', JSON.stringify(customStickers));
+            
+            renderStickerPopover();
+            e.target.value = '';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function deleteCustomSticker(index) {
+        const customStickers = JSON.parse(localStorage.getItem('prodigy_custom_stickers') || '[]');
+        customStickers.splice(index, 1);
+        localStorage.setItem('prodigy_custom_stickers', JSON.stringify(customStickers));
+        renderStickerPopover();
     }
 
     function sendSticker(stickerUrl) {

@@ -1038,3 +1038,62 @@ body {
     animation: scaleIn 0.3s var(--transition-spring) forwards;
 }
 
+/* Custom Stickers User Library Styles */
+.sticker-item.add-custom-sticker {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    min-height: 60px;
+}
+
+.sticker-item.add-custom-sticker:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    transform: scale(1.05);
+}
+
+.sticker-item-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.delete-sticker-btn {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 18px;
+    height: 18px;
+    background: var(--error);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 10;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.delete-sticker-btn:hover {
+    transform: scale(1.2);
+    background: #ff4d4d;
+}
+
+.sticker-item-wrapper:hover .delete-sticker-btn {
+    opacity: 1;
+}
+
+

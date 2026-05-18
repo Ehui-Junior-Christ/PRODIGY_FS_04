@@ -46,6 +46,11 @@ Ce projet a été conçu avec une exigence rigoureuse, en combinant une architec
 ### 8. 🎬 Lecteur Vidéo en Ligne Intégré (Inline Video Player)
 - **Lecture Directe dans le Chat :** Détection automatique des formats vidéo partagés (`video/mp4`, `video/webm`, `video/ogg`, etc.) et affichage immédiat sous forme de lecteur vidéo HTML5 haute résolution, contrôlable et incurvé directement dans le fil de discussion sans nécessiter de téléchargement externe.
 
+### 9. ✨ Créateur & Bibliothèque de Stickers Personnels (User-Generated Stickers)
+- **Ajout Direct d'Images / GIFs :** Les utilisateurs peuvent désormais enrichir la bibliothèque en important leurs propres images transparentes, mèmes ou GIFs animés directement depuis leur appareil photo/galerie.
+- **Stockage Persistant Clientless (LocalStorage) :** Sauvegarde locale persistante et instantanée via `localStorage` garantissant zéro surcharge de bande passante ou de stockage sur la base de données du serveur.
+- **Gestion Complète de Collection :** Option de suppression rapide en un clic (bouton de suppression dynamique rouge survolé) sur chaque sticker personnel pour gérer sa collection en toute simplicité.
+
 ---
 
 ## 🛠️ Architecture Technique & Technologies
