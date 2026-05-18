@@ -831,16 +831,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (fileType.startsWith('image/')) {
                     displayContent = `<img src="${fileData}" alt="${escapeHTML(fileName)}" style="max-width: 100%; border-radius: 8px; margin-top: 5px;">`;
                 } else if (fileType.startsWith('video/')) {
-                    displayContent = `
-                        <video src="${fileData}" controls style="max-width: 100%; max-height: 250px; border-radius: 12px; margin-top: 8px; display: block; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.3);" preload="metadata" playsinline></video>
-                    `;
+                    displayContent = `<video src="${fileData}" controls style="max-width: 100%; max-height: 250px; border-radius: 12px; margin-top: 8px; display: block; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.3);" preload="metadata" playsinline></video>`;
                 } else {
-                    displayContent = `
-                        <div style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-top: 5px;">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                            <a href="${fileData}" download="${escapeHTML(fileName)}" style="color: inherit; text-decoration: none;">${escapeHTML(fileName)}</a>
-                        </div>
-                    `;
+                    displayContent = `<div style="display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-top: 5px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg><a href="${fileData}" download="${escapeHTML(fileName)}" style="color: inherit; text-decoration: none;">${escapeHTML(fileName)}</a></div>`;
                 }
             } catch(e) {
                 displayContent = "Fichier corrompu";
@@ -863,23 +856,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const isBase64 = fileData && fileData.startsWith('data:');
                 
-                displayContent = `
-                    <div class="custom-audio">
-                        <button onclick="window.toggleAudio('${audioId}', this)" class="audio-btn">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                        </button>
-                        <div class="audio-body">
-                            <div class="audio-track">
-                                <div id="progress-${audioId}" class="audio-fill"></div>
-                            </div>
-                            <div class="audio-info">
-                                <span class="audio-label">Vocal</span>
-                                <span id="time-${audioId}" class="audio-time">${displayTime}</span>
-                            </div>
-                        </div>
-                        <audio id="${audioId}" src="${!isBase64 ? fileData : ''}" data-fixed-duration="${fixedDuration}" ontimeupdate="window.updateAudioProgress('${audioId}')" onended="window.resetAudio('${audioId}')" onplay="window.updateAudioProgress('${audioId}')" onpause="window.updateAudioProgress('${audioId}')" preload="auto"></audio>
-                    </div>
-                `;
+                displayContent = `<div class="custom-audio"><button onclick="window.toggleAudio('${audioId}', this)" class="audio-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button><div class="audio-body"><div class="audio-track"><div id="progress-${audioId}" class="audio-fill"></div></div><div class="audio-info"><span class="audio-label">Vocal</span><span id="time-${audioId}" class="audio-time">${displayTime}</span></div></div><audio id="${audioId}" src="${!isBase64 ? fileData : ''}" data-fixed-duration="${fixedDuration}" ontimeupdate="window.updateAudioProgress('${audioId}')" onended="window.resetAudio('${audioId}')" onplay="window.updateAudioProgress('${audioId}')" onpause="window.updateAudioProgress('${audioId}')" preload="auto"></audio></div>`;
 
                 // Load native blob asynchronously
                 if (fileData && fileData.startsWith('data:')) {
@@ -917,12 +894,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (excerpt.length > 50) excerpt = excerpt.substring(0, 50) + '...';
             
-            replyBubbleHtml = `
-                <div class="message-reply-bubble" data-reply-target="${msg.reply_to_id}">
-                    <span class="message-reply-username">${escapeHTML(msg.reply_username || 'Utilisateur')}</span>
-                    <p class="message-reply-text">${escapeHTML(excerpt)}</p>
-                </div>
-            `;
+            replyBubbleHtml = `<div class="message-reply-bubble" data-reply-target="${msg.reply_to_id}"><span class="message-reply-username">${escapeHTML(msg.reply_username || 'Utilisateur')}</span><p class="message-reply-text">${escapeHTML(excerpt)}</p></div>`;
         }
 
         const div = document.createElement('div');
