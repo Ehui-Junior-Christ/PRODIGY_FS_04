@@ -6,6 +6,16 @@ const path = require('path');
 const { createClient } = require('@libsql/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const webpush = require('web-push');
+
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BHI3mBbx5toiBbhVK7u8nI_bMgqsnHQtLBLcJe-SSMvk6GjrBTZJnDFP6Hj7AXUOBa4Y-wINSOiFOcuY7eTuKzI';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'cH5Aym2Hrkmz0OqHIouTaponQyPG8h19WA9RazfzhmY';
+
+webpush.setVapidDetails(
+    'mailto:support@prodigy-chat.ci',
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+);
 
 const app = express();
 const server = http.createServer(app);
@@ -82,6 +92,13 @@ async function initDb() {
             user_id INTEGER,
             PRIMARY KEY(room_id, user_id),
             FOREIGN KEY(room_id) REFERENCES rooms(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )`);
+
+        await db.execute(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            subscription TEXT UNIQUE,
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
 
@@ -215,6 +232,23 @@ app.get('/api/users', async (req, res) => {
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
+// --- WEB PUSH SUBSCRIPTIONS ---
+app.post('/api/push/subscribe', authenticateToken, async (req, res) => {
+    const { subscription } = req.body;
+    if (!subscription) return res.status(400).json({ error: "Abonnement manquant" });
+
+    try {
+        await db.execute({
+            sql: `INSERT OR REPLACE INTO push_subscriptions (user_id, subscription) VALUES (?, ?)`,
+            args: [req.user.id, JSON.stringify(subscription)]
+        });
+        res.status(201).json({ success: true, message: "Abonnement push enregistré." });
+    } catch(e) {
+        console.error("Erreur lors de l'enregistrement de l'abonnement push:", e);
+        res.status(500).json({ error: "Erreur serveur." });
     }
 });
 
@@ -695,6 +729,75 @@ io.on('connection', async (socket) => {
             } else {
                 // Pour un canal public, diffusion globale
                 io.emit('new_message', messageData);
+            }
+
+            // Envoyer des notifications Push Web en arrière-plan aux membres hors ligne/inactifs
+            try {
+                let subsSql = `SELECT user_id, subscription FROM push_subscriptions WHERE user_id != ?`;
+                let subsArgs = [userId];
+                
+                if (room.is_locked === 1) {
+                    // Pour les canaux verrouillés, n'envoyer qu'aux membres autorisés
+                    const membersRes = await db.execute({
+                        sql: `SELECT user_id FROM room_members WHERE room_id = ?`,
+                        args: [roomId]
+                    });
+                    const memberIds = membersRes.rows.map(row => Number(row.user_id));
+                    if (room.creator_id) {
+                        memberIds.push(Number(room.creator_id));
+                    }
+                    
+                    if (memberIds.length > 0) {
+                        const placeholders = memberIds.map(() => '?').join(',');
+                        subsSql = `SELECT user_id, subscription FROM push_subscriptions WHERE user_id != ? AND user_id IN (${placeholders})`;
+                        subsArgs = [userId, ...memberIds];
+                    } else {
+                        subsSql = ''; // Aucun autre membre
+                    }
+                }
+                
+                if (subsSql) {
+                    const subsRes = await db.execute({
+                        sql: subsSql,
+                        args: subsArgs
+                    });
+                    
+                    for (const row of subsRes.rows) {
+                        const subUserId = Number(row.user_id);
+                        if (!onlineUsers.has(subUserId)) {
+                            const subscription = JSON.parse(row.subscription);
+                            let excerpt = content;
+                            if (excerpt.startsWith('[FILE]:')) excerpt = "📎 Fichier joint";
+                            else if (excerpt.startsWith('[AUDIO]:')) excerpt = "🎤 Message vocal";
+                            else if (excerpt.startsWith('[STICKER]:')) excerpt = "🖼️ Sticker";
+                            
+                            const payload = JSON.stringify({
+                                title: `Nouveau message dans #${room.name}`,
+                                options: {
+                                    body: `${socket.user.username}: ${excerpt}`,
+                                    icon: '/favicon.ico',
+                                    badge: '/favicon.ico',
+                                    tag: `room-${roomId}`,
+                                    data: {
+                                        roomId: roomId,
+                                        roomName: room.name
+                                    }
+                                }
+                            });
+                            
+                            webpush.sendNotification(subscription, payload).catch(err => {
+                                if (err.statusCode === 410 || err.statusCode === 404) {
+                                    db.execute({
+                                        sql: `DELETE FROM push_subscriptions WHERE subscription = ?`,
+                                        args: [row.subscription]
+                                    }).catch(() => {});
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (pushErr) {
+                console.error("Erreur lors de l'envoi des notifications push:", pushErr);
             }
         } catch (e) {
             console.error(e);

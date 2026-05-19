@@ -7,7 +7,29 @@ self.addEventListener('activate', (event) => {
     event.waitUntil(self.clients.claim());
 });
 
-// Écouter les messages du client pour afficher une notification en arrière-plan
+// Écouter l'événement Push du serveur (quand l'application est FERMÉE et que l'utilisateur reçoit un message)
+self.addEventListener('push', (event) => {
+    if (event.data) {
+        try {
+            const data = event.data.json();
+            const { title, options } = data;
+            event.waitUntil(
+                self.registration.showNotification(title, options)
+            );
+        } catch (e) {
+            // Fallback en texte brut si les données ne sont pas au format JSON
+            event.waitUntil(
+                self.registration.showNotification("Prodigy Chat", {
+                    body: event.data.text(),
+                    icon: '/favicon.ico',
+                    badge: '/favicon.ico'
+                })
+            );
+        }
+    }
+});
+
+// Écouter les messages du client pour afficher une notification locale
 self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
         const { title, options } = event.data;
