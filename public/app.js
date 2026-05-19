@@ -68,6 +68,26 @@ document.addEventListener('DOMContentLoaded', () => {
     let filteredUsersForMention = [];
     let mentionAtIndex = -1;
 
+    // Demander les permissions de notifications et enregistrer le Service Worker immédiatement à l'entrée sur le site
+    if ('Notification' in window) {
+        if (Notification.permission === 'default') {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    console.log('Notifications autorisées par l\'utilisateur.');
+                }
+            });
+        }
+    }
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(reg => {
+                console.log('Service Worker enregistré à l\'entrée du site !');
+                initPushNotifications();
+            })
+            .catch(err => console.error('Erreur d\'enregistrement du Service Worker:', err));
+    }
+
     // Check Authentication on load
     const token = localStorage.getItem('prodigy_token');
     const savedUser = localStorage.getItem('prodigy_user');
@@ -165,21 +185,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        if ('Notification' in window) {
-            if (Notification.permission === 'default') {
-                Notification.requestPermission();
-            }
-        }
-
-        // Enregistrer le Service Worker pour les notifications d'arrière-plan (PWA/Mobile)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js')
-                .then(reg => {
-                    console.log('Service Worker enregistré pour les notifications mobiles !');
-                    initPushNotifications();
-                })
-                .catch(err => console.error('Erreur d\'enregistrement du Service Worker:', err));
-        }
+        // Synchroniser l'abonnement push en arrière-plan
+        initPushNotifications();
 
         connectSocket(token);
         fetchUsers();
