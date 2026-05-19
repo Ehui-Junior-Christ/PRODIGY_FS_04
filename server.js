@@ -8,8 +8,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const webpush = require('web-push');
 
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BHI3mBbx5toiBbhVK7u8nI_bMgqsnHQtLBLcJe-SSMvk6GjrBTZJnDFP6Hj7AXUOBa4Y-wINSOiFOcuY7eTuKzI';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'cH5Aym2Hrkmz0OqHIouTaponQyPG8h19WA9RazfzhmY';
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 
 webpush.setVapidDetails(
     'mailto:support@prodigy-chat.ci',
@@ -236,6 +236,10 @@ app.get('/api/users', async (req, res) => {
 });
 
 // --- WEB PUSH SUBSCRIPTIONS ---
+app.get('/api/push/public-key', (req, res) => {
+    res.json({ publicKey: VAPID_PUBLIC_KEY || '' });
+});
+
 app.post('/api/push/subscribe', authenticateToken, async (req, res) => {
     const { subscription } = req.body;
     if (!subscription) return res.status(400).json({ error: "Abonnement manquant" });

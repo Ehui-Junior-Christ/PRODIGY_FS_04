@@ -2318,15 +2318,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (permission !== 'granted') return;
 
             const registration = await navigator.serviceWorker.ready;
-            const publicVapidKey = 'BHI3mBbx5toiBbhVK7u8nI_bMgqsnHQtLBLcJe-SSMvk6GjrBTZJnDFP6Hj7AXUOBa4Y-wINSOiFOcuY7eTuKzI';
             
             let subscription = await registration.pushManager.getSubscription();
             
             if (!subscription) {
-                subscription = await registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-                });
+                // Récupérer la clé publique VAPID dynamiquement depuis le serveur pour la sécurité
+                const vapidRes = await fetch('/api/push/public-key');
+                const { publicKey: publicVapidKey } = await vapidRes.json();
+                
+                if (publicVapidKey) {
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                    });
+                } else {
+                    console.warn("Clé VAPID publique non configurée sur le serveur.");
+                    return;
+                }
             }
 
             const token = localStorage.getItem('prodigy_token');
