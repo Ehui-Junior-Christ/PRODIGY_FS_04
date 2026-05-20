@@ -7,6 +7,8 @@ const { createClient } = require('@libsql/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const webpush = require('web-push');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -25,6 +27,64 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_prodigy_key_2026';
+
+// ===== SÉCURITÉ : En-têtes HTTP robustes (Helmet) =====
+app.use(helmet({
+    contentSecurityPolicy: false, // Désactivé pour permettre les ressources inline de l'app
+    crossOriginEmbedderPolicy: false
+}));
+app.use(helmet.referrerPolicy({ policy: 'strict-origin-when-cross-origin' }));
+app.use(helmet.noSniff()); // X-Content-Type-Options: nosniff
+app.use(helmet.frameguard({ action: 'deny' })); // X-Frame-Options: DENY (anti clickjacking)
+app.use(helmet.xssFilter()); // X-XSS-Protection: 1; mode=block
+app.use(helmet.hsts({ maxAge: 31536000, includeSubDomains: true })); // Strict-Transport-Security
+
+// Personnalisation Permissions-Policy
+app.use((req, res, next) => {
+    res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), payment=()');
+    res.removeHeader('X-Powered-By');
+    next();
+});
+
+// ===== SÉCURITÉ : Rate Limiting Global =====
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // max 300 requêtes par IP par fenêtre de 15 min
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Trop de requêtes. Veuillez réessayer dans quelques minutes.' }
+});
+app.use('/api/', globalLimiter);
+
+// Rate limiters spécifiques pour les routes sensibles
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 15, // max 15 tentatives de login/register par IP par 15 min
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Trop de tentatives d\'authentification. Réessayez dans 15 minutes.' }
+});
+
+const ticketLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 heure
+    max: 10, // max 10 tickets par heure par IP
+    message: { error: 'Trop de plaintes soumises. Réessayez plus tard.' }
+});
+
+// ===== Helpers de validation / sanitization =====
+function sanitizeInput(str) {
+    if (typeof str !== 'string') return '';
+    return str.replace(/[<>"'`\\;]/g, '').trim();
+}
+
+function isValidUsername(username) {
+    // Alphanumérique + tirets/underscores, 3-30 caractères
+    return /^[a-zA-Z0-9_-]{3,30}$/.test(username);
+}
+
+function isValidPassword(password) {
+    return typeof password === 'string' && password.length >= 6 && password.length <= 128;
+}
 
 // Middleware
 app.use(express.json({ limit: '25mb' }));
@@ -72,6 +132,7 @@ async function initDb() {
         
         try { await db.execute(`ALTER TABLE rooms ADD COLUMN creator_id INTEGER`); } catch(e){}
         try { await db.execute(`ALTER TABLE rooms ADD COLUMN is_locked INTEGER DEFAULT 0`); } catch(e){}
+        try { await db.execute(`ALTER TABLE rooms ADD COLUMN message_expiry_limit INTEGER DEFAULT 0`); } catch(e){}
         try { await db.execute(`ALTER TABLE messages ADD COLUMN reply_to_id INTEGER`); } catch(e){}
         try { await db.execute(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`); } catch(e){}
 
@@ -102,33 +163,61 @@ async function initDb() {
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
 
-        // Nettoyage périodique automatique toutes les 10 minutes des messages et fichiers vieux de plus de 24 heures (GMT / Côte d'Ivoire)
+        // Nettoyage périodique automatique toutes les 30 secondes des messages et fichiers expirés (5, 10, 15, 30 min ou max 24 heures)
         setInterval(async () => {
             try {
-                const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+                const now = Date.now();
                 
-                // 1. Récupérer les messages qui vont être supprimés pour repérer leurs fichiers physiques
-                const filesToClean = await db.execute({
-                    sql: `SELECT content FROM messages WHERE timestamp < ?`,
-                    args: [twentyFourHoursAgo]
+                // Récupérer tous les canaux pour connaître leurs limites d'expiration
+                const roomsRes = await db.execute(`SELECT id, message_expiry_limit FROM rooms`);
+                const roomLimits = {};
+                roomsRes.rows.forEach(r => {
+                    roomLimits[Number(r.id)] = r.message_expiry_limit ? Number(r.message_expiry_limit) : 0;
                 });
                 
-                // 2. Supprimer les messages de la base de données
-                const res = await db.execute({
-                    sql: `DELETE FROM messages WHERE timestamp < ?`,
-                    args: [twentyFourHoursAgo]
+                // Récupérer tous les messages pour vérifier leur expiration
+                const msgsRes = await db.execute(`SELECT id, room_id, content, timestamp FROM messages`);
+                
+                const expiredIds = [];
+                const filesToClean = [];
+                
+                msgsRes.rows.forEach(msg => {
+                    const msgId = Number(msg.id);
+                    const roomId = Number(msg.room_id);
+                    const content = msg.content;
+                    const timestampStr = msg.timestamp;
+                    
+                    // Conversion de la date standard GMT "YYYY-MM-DD HH:MM:SS" en timestamp UNIX
+                    const msgTime = new Date(timestampStr.replace(' ', 'T') + 'Z').getTime();
+                    
+                    // La limite en minutes est soit celle configurée sur le salon, soit 24h (1440 minutes)
+                    const limitMinutes = roomLimits[roomId] ? roomLimits[roomId] : (24 * 60);
+                    const expiryTime = msgTime + limitMinutes * 60 * 1000;
+                    
+                    if (now > expiryTime) {
+                        expiredIds.push(msgId);
+                        if (content && (content.startsWith('[FILE]:') || content.startsWith('[AUDIO]:') || content.startsWith('[STICKER]:'))) {
+                            filesToClean.push(content);
+                        }
+                    }
                 });
                 
-                if (res.rowsAffected > 0) {
-                    console.log(`[Nettoyage 24h] ${res.rowsAffected} message(s) supprimé(s).`);
-                    io.emit('messages_cleaned');
-                }
-                
-                // 3. Supprimer les fichiers physiques associés du disque dur
-                const fs = require('fs');
-                filesToClean.rows.forEach(row => {
-                    const content = row.content;
-                    if (content && (content.startsWith('[FILE]:') || content.startsWith('[AUDIO]:') || content.startsWith('[STICKER]:'))) {
+                if (expiredIds.length > 0) {
+                    // Supprimer les messages de la base de données
+                    const placeholders = expiredIds.map(() => '?').join(',');
+                    const res = await db.execute({
+                        sql: `DELETE FROM messages WHERE id IN (${placeholders})`,
+                        args: expiredIds
+                    });
+                    
+                    if (res.rowsAffected > 0) {
+                        console.log(`[Nettoyage] ${res.rowsAffected} message(s) expiré(s) supprimé(s).`);
+                        io.emit('messages_cleaned');
+                    }
+                    
+                    // Supprimer les fichiers physiques associés
+                    const fs = require('fs');
+                    filesToClean.forEach(content => {
                         const isSticker = content.startsWith('[STICKER]:');
                         const prefix = isSticker ? '[STICKER]:' : (content.startsWith('[FILE]:') ? '[FILE]:' : '[AUDIO]:');
                         let relativeUrl = '';
@@ -145,16 +234,16 @@ async function initDb() {
                             if (fs.existsSync(filePath)) {
                                 try {
                                     fs.unlinkSync(filePath);
-                                    console.log(`[Nettoyage Fichiers] Fichier expiré supprimé (>24h Côte d'Ivoire) : ${fileName}`);
+                                    console.log(`[Nettoyage Fichiers] Fichier expiré supprimé : ${fileName}`);
                                 } catch (e) {}
                             }
                         }
-                    }
-                });
+                    });
+                }
             } catch(e) {
                 console.error("Erreur lors du nettoyage périodique :", e);
             }
-        }, 10 * 60 * 1000);
+        }, 30 * 1000);
 
         // S'assurer du répertoire d'uploads
         const fs = require('fs');
@@ -182,14 +271,16 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// Auth Routes
-app.post('/api/register', async (req, res) => {
+// Auth Routes (Rate limited)
+app.post('/api/register', authLimiter, async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: "Nom d'utilisateur et mot de passe requis." });
+    if (!isValidUsername(username)) return res.status(400).json({ error: "Nom d'utilisateur invalide. Utilisez 3-30 caractères alphanumériques (a-z, 0-9, _, -)." });
+    if (!isValidPassword(password)) return res.status(400).json({ error: "Mot de passe invalide. Minimum 6 caractères, maximum 128." });
 
     const role = (username.toLowerCase() === 'admin') ? 'admin' : 'user';
     try {
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 12);
         const result = await db.execute({
             sql: `INSERT INTO users (username, password, role) VALUES (?, ?, ?)`,
             args: [username, hashedPassword, role]
@@ -205,8 +296,11 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
     const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "Identifiants requis." });
+    if (typeof username !== 'string' || username.length > 30) return res.status(400).json({ error: 'Identifiants incorrects.' });
+    if (typeof password !== 'string' || password.length > 128) return res.status(400).json({ error: 'Identifiants incorrects.' });
     try {
         const result = await db.execute({
             sql: `SELECT * FROM users WHERE username = ?`,
@@ -283,10 +377,19 @@ app.get('/api/tickets', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/api/tickets', authenticateToken, async (req, res) => {
-    const { category, title, description } = req.body;
+app.post('/api/tickets', authenticateToken, ticketLimiter, async (req, res) => {
+    let { category, title, description } = req.body;
     if (!category || !title || !description) {
         return res.status(400).json({ error: "Tous les champs sont requis." });
+    }
+    
+    // SÉCURITÉ : Assainissement strict pour prévenir le pentesting/XSS
+    category = sanitizeInput(category);
+    title = sanitizeInput(title);
+    description = sanitizeInput(description);
+    
+    if (title.length > 100 || description.length > 2000) {
+        return res.status(400).json({ error: "Limite de caractères dépassée (Max: titre 100, description 2000)." });
     }
     
     try {
@@ -482,17 +585,28 @@ app.get('/api/rooms', async (req, res) => {
 });
 
 app.post('/api/rooms', authenticateToken, async (req, res) => {
-    const { name, is_locked } = req.body;
+    let { name, is_locked, message_expiry_limit } = req.body;
     if (!name) return res.status(400).json({ error: "Nom du canal requis." });
 
+    // SÉCURITÉ : Assainissement strict et validation du nom de canal
+    name = sanitizeInput(name);
+    if (!/^[a-zA-Z0-9_\-\s]{3,30}$/.test(name)) {
+        return res.status(400).json({ error: "Nom de canal invalide. Utilisez 3 à 30 caractères alphanumériques." });
+    }
+
     const lockedVal = is_locked ? 1 : 0;
+    const expiryLimit = message_expiry_limit ? Number(message_expiry_limit) : 0;
+    if (![0, 5, 10, 15, 30].includes(expiryLimit)) {
+        return res.status(400).json({ error: "Limite de temps de message invalide." });
+    }
+
     try {
         const result = await db.execute({
-            sql: `INSERT INTO rooms (name, type, creator_id, is_locked) VALUES (?, 'public', ?, ?)`,
-            args: [name, req.user.id, lockedVal]
+            sql: `INSERT INTO rooms (name, type, creator_id, is_locked, message_expiry_limit) VALUES (?, 'public', ?, ?, ?)`,
+            args: [name, req.user.id, lockedVal, expiryLimit]
         });
         const roomId = Number(result.lastInsertRowid);
-        const roomData = { id: roomId, name, type: 'public', creator_id: req.user.id, is_locked: lockedVal };
+        const roomData = { id: roomId, name, type: 'public', creator_id: req.user.id, is_locked: lockedVal, message_expiry_limit: expiryLimit };
         io.emit('room_created', roomData);
         res.status(201).json(roomData);
     } catch (error) {
@@ -589,6 +703,19 @@ io.on('connection', async (socket) => {
     socket.on('send_message', async (data) => {
         const roomId = Number(data.roomId);
         let { content } = data;
+
+        if (!roomId || isNaN(roomId) || roomId <= 0) {
+            return;
+        }
+        if (!content || typeof content !== 'string') {
+            return;
+        }
+
+        // SÉCURITÉ : Limiter la taille des messages textuels standards à 5000 caractères
+        const isMedia = content.startsWith('[FILE]:') || content.startsWith('[AUDIO]:') || content.startsWith('[STICKER]:');
+        if (!isMedia && content.length > 5000) {
+            return;
+        }
         
         // Optimiser l'extraction des données Base64 (Fichiers, Audio, Stickers personnalisés) vers le disque
         if (content && (content.startsWith('[FILE]:') || content.startsWith('[AUDIO]:') || content.startsWith('[STICKER]:'))) {
@@ -845,6 +972,13 @@ io.on('connection', async (socket) => {
         socket.join(`room_${roomId}`);
         
         try {
+            const roomRes = await db.execute({
+                sql: `SELECT message_expiry_limit FROM rooms WHERE id = ?`,
+                args: [roomId]
+            });
+            const expiryLimit = roomRes.rows[0] ? Number(roomRes.rows[0].message_expiry_limit) : 0;
+            const limitMinutes = expiryLimit > 0 ? expiryLimit : (24 * 60);
+
             const result = await db.execute({
                 sql: `
                     SELECT * FROM (
@@ -861,7 +995,15 @@ io.on('connection', async (socket) => {
                 `,
                 args: [roomId]
             });
-            socket.emit('chat_history', { roomId, messages: result.rows });
+
+            // Filtrer les messages déjà expirés
+            const now = Date.now();
+            const activeMessages = result.rows.filter(msg => {
+                const msgTime = new Date(msg.timestamp.replace(' ', 'T') + 'Z').getTime();
+                return now <= msgTime + limitMinutes * 60 * 1000;
+            });
+
+            socket.emit('chat_history', { roomId, messages: activeMessages });
         } catch (e) {
             console.error(e);
         }

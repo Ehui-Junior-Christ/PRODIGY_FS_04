@@ -29,12 +29,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const createRoomModal = document.getElementById('create-room-modal');
     const newRoomNameInput = document.getElementById('new-room-name');
     const newRoomLockedCheckbox = document.getElementById('new-room-locked');
+    const newRoomExpirySelect = document.getElementById('new-room-expiry');
     const cancelRoomBtn = document.getElementById('cancel-room-btn');
     const confirmRoomBtn = document.getElementById('confirm-room-btn');
     
     const roomSearchInput = document.getElementById('room-search-input');
     const toggleLockBtn = document.getElementById('toggle-lock-btn');
     const inviteMemberBtn = document.getElementById('invite-member-btn');
+    const deleteRoomBtn = document.getElementById('delete-room-btn');
     const inviteModal = document.getElementById('invite-modal');
     const inviteUsernameInput = document.getElementById('invite-username');
     const cancelInviteBtn = document.getElementById('cancel-invite-btn');
@@ -479,6 +481,15 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchRooms();
         });
 
+        socket.on('room_deleted', (data) => {
+            const deletedId = Number(data.roomId);
+            if (Number(currentRoomId) === deletedId) {
+                alert("Ce canal a été supprimé par son créateur ou un administrateur.");
+                switchRoom(1, 'Général');
+            }
+            fetchRooms();
+        });
+
         socket.on('message_deleted', (data) => {
             const msgEl = document.getElementById('msg-' + data.id);
             if (msgEl) {
@@ -581,6 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
         confirmRoomBtn.addEventListener('click', async () => {
             const roomName = newRoomNameInput.value.trim();
             const isLocked = newRoomLockedCheckbox ? newRoomLockedCheckbox.checked : false;
+            const expiryLimit = newRoomExpirySelect ? Number(newRoomExpirySelect.value) : 0;
             
             if (!roomName) return;
             
@@ -591,7 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
                     },
-                    body: JSON.stringify({ name: roomName, is_locked: isLocked })
+                    body: JSON.stringify({ name: roomName, is_locked: isLocked, message_expiry_limit: expiryLimit })
                 });
                 
                 const textData = await res.text();
@@ -636,6 +648,37 @@ document.addEventListener('DOMContentLoaded', () => {
             inviteModal.classList.remove('hidden');
             inviteUsernameInput.value = '';
             inviteUsernameInput.focus();
+        });
+    }
+
+    // Supprimer le canal
+    if (deleteRoomBtn) {
+        deleteRoomBtn.addEventListener('click', async () => {
+            if (!currentRoomData) return;
+            const roomId = currentRoomData.id;
+            if (Number(roomId) === 1) {
+                alert("Impossible de supprimer le canal Général.");
+                return;
+            }
+            if (!confirm(`Voulez-vous vraiment supprimer définitivement le canal "# ${currentRoomData.name}" ainsi que tous ses messages ?`)) return;
+            
+            try {
+                const res = await fetch(`/api/rooms/${roomId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('prodigy_token')}`
+                    }
+                });
+                if (res.ok) {
+                    await fetchRooms();
+                    switchRoom(1, "Général");
+                } else {
+                    const data = await res.json();
+                    alert(data.error || "Erreur de suppression");
+                }
+            } catch (err) {
+                alert("Erreur de connexion");
+            }
         });
     }
     
@@ -1168,11 +1211,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return div.innerHTML;
     }
 
-    // Notifications Helpers
     function updateRoomActions() {
-        if (!currentRoomData) return;
+        if (!currentRoomData || !currentUser) return;
         
-        if (currentRoomData.creator_id === currentUser.id) {
+        if (Number(currentRoomData.creator_id) === Number(currentUser.id)) {
             toggleLockBtn.classList.remove('hidden');
             if (currentRoomData.is_locked === 1) {
                 toggleLockBtn.style.color = 'var(--error)';
@@ -1184,6 +1226,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             toggleLockBtn.classList.add('hidden');
             inviteMemberBtn.classList.add('hidden');
+        }
+
+        // SÉCURITÉ & COLLABORATION : Bouton de suppression de canal visible pour le créateur ou l'admin
+        if (Number(currentRoomData.id) !== 1 && (Number(currentRoomData.creator_id) === Number(currentUser.id) || currentUser.role === 'admin')) {
+            deleteRoomBtn.classList.remove('hidden');
+        } else {
+            deleteRoomBtn.classList.add('hidden');
         }
     }
 
@@ -2350,6 +2399,60 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.warn("Impossible d'enregistrer l'abonnement push:", error);
+        }
+    }
+
+    // Onboarding Splash Screen Logic
+    const onboardingOverlay = document.getElementById('onboarding-overlay');
+    if (onboardingOverlay) {
+        const hasOnboarded = localStorage.getItem('prodigy_onboarded');
+        if (!hasOnboarded) {
+            onboardingOverlay.classList.remove('hidden');
+        }
+        
+        const slides = onboardingOverlay.querySelectorAll('.onboarding-slide');
+        const dots = onboardingOverlay.querySelectorAll('.progress-dot');
+        const btnNext = document.getElementById('onboarding-next');
+        const btnSkip = document.getElementById('onboarding-skip');
+        
+        let currentSlideIndex = 0;
+        
+        function showSlide(index) {
+            slides.forEach(slide => slide.classList.remove('active'));
+            dots.forEach(dot => dot.classList.remove('active'));
+            
+            slides[index].classList.add('active');
+            dots[index].classList.add('active');
+            currentSlideIndex = index;
+            
+            if (index === slides.length - 1) {
+                btnNext.textContent = 'Commencer';
+            } else {
+                btnNext.textContent = 'Suivant';
+            }
+        }
+        
+        btnNext.addEventListener('click', () => {
+            if (currentSlideIndex === slides.length - 1) {
+                closeOnboarding();
+            } else {
+                showSlide(currentSlideIndex + 1);
+            }
+        });
+        
+        btnSkip.addEventListener('click', closeOnboarding);
+        
+        dots.forEach((dot, index) => {
+            dot.addEventListener('click', () => showSlide(index));
+        });
+        
+        function closeOnboarding() {
+            onboardingOverlay.classList.add('fade-out');
+            setTimeout(() => {
+                onboardingOverlay.classList.add('hidden');
+                onboardingOverlay.classList.remove('fade-out');
+                localStorage.setItem('prodigy_onboarded', 'true');
+            }, 500);
         }
     }
 });

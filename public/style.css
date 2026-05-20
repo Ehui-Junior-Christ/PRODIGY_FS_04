@@ -1645,5 +1645,202 @@ body.theme-orange {
     color: #ffffff;
 }
 
+/* ==========================================================================
+   ONBOARDING SPLASH SCREENS
+   ========================================================================== */
+
+.onboarding-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at center, rgba(15, 15, 17, 0.95) 0%, #050507 100%);
+    backdrop-filter: blur(12px);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    transition: opacity 0.5s ease;
+}
+
+.onboarding-overlay.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.onboarding-card {
+    background: rgba(24, 24, 27, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 28px;
+    width: 100%;
+    max-width: 500px;
+    min-height: 520px;
+    padding: 3rem 2.5rem 2.5rem;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8), 
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+    animation: scaleUpSpring 0.6s var(--transition-spring) forwards;
+}
+
+@keyframes scaleUpSpring {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.onboarding-progress {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+
+.progress-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.progress-dot.active {
+    background: var(--text-primary);
+    width: 24px;
+    border-radius: 4px;
+}
+
+.onboarding-slides {
+    flex: 1;
+    position: relative;
+}
+
+.onboarding-slide {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    animation: slideFadeIn 0.5s var(--transition-smooth) forwards;
+}
+
+.onboarding-slide.active {
+    display: flex;
+}
+
+@keyframes slideFadeIn {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.onboarding-illustration {
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 2rem;
+}
+
+.slide-icon {
+    color: var(--text-primary);
+    position: relative;
+    z-index: 2;
+    filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.3));
+    animation: floatIcon 4s ease-in-out infinite;
+}
+
+@keyframes floatIcon {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.glow-bubble {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    filter: blur(25px);
+    opacity: 0.25;
+    z-index: 1;
+    animation: pulseGlow 3s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { width: 80px; height: 80px; opacity: 0.25; }
+    50% { width: 100px; height: 100px; opacity: 0.4; }
+}
+
+.chat-glow { background: #ffffff; }
+.lock-glow { background: #3b82f6; }
+.mic-glow { background: #ec4899; }
+.pwa-glow { background: #10b981; }
+
+.slide-title {
+    font-family: var(--font-serif);
+    font-size: 2.2rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+}
+
+.slide-title span {
+    font-family: var(--font-sans);
+    font-weight: 300;
+    color: var(--text-secondary);
+}
+
+.slide-subtitle {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 1.25rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.slide-description {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-width: 380px;
+}
+
+.onboarding-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 1.5rem;
+}
+
+.onboarding-actions button {
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+#onboarding-skip {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+    transition: color 0.2s ease;
+}
+
+#onboarding-skip:hover {
+    color: var(--text-primary);
+}
+
 
 

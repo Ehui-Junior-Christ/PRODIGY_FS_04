@@ -117,6 +117,9 @@
                     <button id="invite-member-btn" class="btn-icon hidden" title="Inviter un membre">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
                     </button>
+                    <button id="delete-room-btn" class="btn-icon hidden" title="Supprimer le canal" style="color: var(--error);">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </button>
                 </div>
             </header>
 
@@ -170,6 +173,16 @@
             <div class="input-group" style="margin-top: 1.5rem; margin-bottom: 1rem;">
                 <label for="new-room-name">Nom du canal</label>
                 <input type="text" id="new-room-name" placeholder="ex: salon-vip" autocomplete="off">
+            </div>
+            <div class="input-group" style="margin-bottom: 1rem;">
+                <label for="new-room-expiry">Limite de temps pour les messages</label>
+                <select id="new-room-expiry" style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-base); color: var(--text-primary); font-size: 0.9rem; margin-top: 0.5rem;">
+                    <option value="0">Aucune (Par défaut : 24 heures)</option>
+                    <option value="5">5 Minutes</option>
+                    <option value="10">10 Minutes</option>
+                    <option value="15">15 Minutes</option>
+                    <option value="30">30 Minutes</option>
+                </select>
             </div>
             <div class="input-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;">
                 <input type="checkbox" id="new-room-locked" style="width: auto; padding: 0;">
@@ -307,6 +320,72 @@
                         </table>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Splash Onboarding Screen -->
+    <div id="onboarding-overlay" class="onboarding-overlay hidden">
+        <div class="onboarding-card">
+            <!-- Progress indicator dots -->
+            <div class="onboarding-progress">
+                <span class="progress-dot active" data-slide="0"></span>
+                <span class="progress-dot" data-slide="1"></span>
+                <span class="progress-dot" data-slide="2"></span>
+                <span class="progress-dot" data-slide="3"></span>
+            </div>
+            
+            <!-- Slides container -->
+            <div class="onboarding-slides" id="onboarding-slides">
+                <!-- Slide 1 -->
+                <div class="onboarding-slide active" data-index="0">
+                    <div class="onboarding-illustration">
+                        <div class="glow-bubble chat-glow"></div>
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="slide-icon"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    </div>
+                    <h2 class="slide-title">Prodigy<span>Chat</span></h2>
+                    <h3 class="slide-subtitle">L'excellence de la messagerie</h3>
+                    <p class="slide-description">Bienvenue sur Prodigy Chat, une plateforme de communication temps réel haut de gamme. Profitez d'une interface brutaliste sombre, épurée et sans distraction.</p>
+                </div>
+                
+                <!-- Slide 2 -->
+                <div class="onboarding-slide" data-index="1">
+                    <div class="onboarding-illustration">
+                        <div class="glow-bubble lock-glow"></div>
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="slide-icon"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    </div>
+                    <h2 class="slide-title">Éphémère & Sécurisé</h2>
+                    <h3 class="slide-subtitle">Confidentialité absolue par défaut</h3>
+                    <p class="slide-description">Tous les messages s'effacent automatiquement après 24 heures. Les créateurs de salons peuvent également configurer des limites d'auto-destruction de 5, 10, 15 ou 30 minutes pour une sécurité maximale.</p>
+                </div>
+                
+                <!-- Slide 3 -->
+                <div class="onboarding-slide" data-index="2">
+                    <div class="onboarding-illustration">
+                        <div class="glow-bubble mic-glow"></div>
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="slide-icon"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                    </div>
+                    <h2 class="slide-title">Médias & Stickers</h2>
+                    <h3 class="slide-subtitle">Vocaux, fichiers & stickers</h3>
+                    <p class="slide-description">Enregistrez des vocaux haute fidélité, partagez des médias volumineux jusqu'à 15 Mo avec prévisualisation directe, et importez vos propres stickers sans surcharger le serveur.</p>
+                </div>
+                
+                <!-- Slide 4 -->
+                <div class="onboarding-slide" data-index="3">
+                    <div class="onboarding-illustration">
+                        <div class="glow-bubble pwa-glow"></div>
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="slide-icon"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                    </div>
+                    <h2 class="slide-title">Expérience PWA</h2>
+                    <h3 class="slide-subtitle">Toujours connecté en arrière-plan</h3>
+                    <p class="slide-description">Installez l'application en un clic sur vos appareils mobiles et de bureau. Recevez des notifications push natives dès qu'un message vous mentionne, même si l'application est fermée.</p>
+                </div>
+            </div>
+            
+            <!-- Actions buttons -->
+            <div class="onboarding-actions">
+                <button id="onboarding-skip" class="btn-secondary">Passer</button>
+                <button id="onboarding-next" class="btn-primary" style="width: auto; padding: 0.75rem 2rem;">Suivant</button>
             </div>
         </div>
     </div>
