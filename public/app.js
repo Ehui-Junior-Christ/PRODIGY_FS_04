@@ -59,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentRoomId = 1; // Default General room
     let typingTimeout = null;
     let unreadCounts = {};
+    let unreadMentions = {};
     let allRooms = [];
     let currentRoomData = null;
     let mediaRecorder = null;
@@ -224,19 +225,48 @@ document.addEventListener('DOMContentLoaded', () => {
         usersList.innerHTML = '';
         let online = 0;
         
-        users.forEach(user => {
-            if (user.id === currentUser.id || user.role === 'admin') return; // Skip self & admins
-            
-            if (user.status === 'online') online++;
-            
-            const li = document.createElement('li');
-            li.id = `user-${user.id}`;
-            li.innerHTML = `
-                <div class="status-dot ${user.status === 'online' ? 'online' : ''}"></div>
-                <span>${user.username}</span>
-            `;
-            usersList.appendChild(li);
-        });
+        // Séparer les utilisateurs en ligne et hors-ligne (exclure soi-même et les admins)
+        const visibleUsers = users.filter(u => u.id !== currentUser.id && u.role !== 'admin');
+        const onlineUsers = visibleUsers.filter(u => u.status === 'online');
+        const offlineUsers = visibleUsers.filter(u => u.status !== 'online');
+        online = onlineUsers.length;
+
+        // Groupe "En ligne" avec label
+        if (onlineUsers.length > 0) {
+            const onlineLabel = document.createElement('li');
+            onlineLabel.className = 'user-group-label online-group-label';
+            onlineLabel.innerHTML = `<span class="user-group-dot online"></span> En ligne — ${onlineUsers.length}`;
+            usersList.appendChild(onlineLabel);
+
+            onlineUsers.forEach(user => {
+                const li = document.createElement('li');
+                li.id = `user-${user.id}`;
+                li.className = 'user-online-item';
+                li.innerHTML = `
+                    <div class="status-dot online"></div>
+                    <span>${user.username}</span>
+                `;
+                usersList.appendChild(li);
+            });
+        }
+
+        // Groupe "Hors-ligne" avec label
+        if (offlineUsers.length > 0) {
+            const offlineLabel = document.createElement('li');
+            offlineLabel.className = 'user-group-label';
+            offlineLabel.innerHTML = `<span class="user-group-dot"></span> Hors-ligne — ${offlineUsers.length}`;
+            usersList.appendChild(offlineLabel);
+
+            offlineUsers.forEach(user => {
+                const li = document.createElement('li');
+                li.id = `user-${user.id}`;
+                li.innerHTML = `
+                    <div class="status-dot"></div>
+                    <span>${user.username}</span>
+                `;
+                usersList.appendChild(li);
+            });
+        }
         
         const currentIsAdmin = currentUser && currentUser.role === 'admin';
         onlineCount.textContent = online + (currentIsAdmin ? 0 : 1);
@@ -314,6 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Clear unread count
         unreadCounts[roomId] = 0;
+        unreadMentions[roomId] = false;
         updateRoomBadge(roomId);
         
         // Update active class in sidebar
@@ -423,6 +454,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 unreadCounts[msg.room_id] = (unreadCounts[msg.room_id] || 0) + 1;
+                if (isMentioned) {
+                    unreadMentions[msg.room_id] = true;
+                }
                 updateRoomBadge(msg.room_id);
                 showToastNotification(msg);
                 
@@ -440,17 +474,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         socket.on('user_status_change', (data) => {
-            const userEl = document.getElementById(`user-${data.userId}`);
-            if (userEl) {
-                const dot = userEl.querySelector('.status-dot');
-                if (data.status === 'online') {
-                    dot.classList.add('online');
-                } else {
-                    dot.classList.remove('online');
-                }
-            } else {
-                fetchUsers(); // Refresh if new user
-            }
+            // Toujours re-charger la liste complète pour maintenir le tri En ligne / Hors-ligne
+            fetchUsers();
         });
         
         socket.on('room_access_denied', (data) => {
@@ -1090,7 +1115,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const div = document.createElement('div');
         div.id = 'msg-' + msg.id;
-        div.className = `message message-row ${isSelf ? 'self' : ''}`;
+        const isMentionedInMsg = msg.content && msg.content.includes(`@${currentUser.username}`);
+        div.className = `message message-row ${isSelf ? 'self' : ''} ${isMentionedInMsg && !isSelf ? 'message-mention-highlight' : ''}`;
         
         let deleteBtnHtml = '';
         if (currentUser && currentUser.role === 'admin') {
@@ -1247,6 +1273,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let badge = roomLi.querySelector('.unread-badge');
         const count = unreadCounts[roomId] || 0;
+        const hasMention = unreadMentions[roomId] || false;
         
         if (count > 0) {
             if (!badge) {
@@ -1254,7 +1281,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 badge.className = 'unread-badge';
                 roomLi.appendChild(badge);
             }
-            badge.textContent = count;
+            if (hasMention) {
+                badge.textContent = `@ ${count}`;
+                badge.classList.add('mention-badge');
+            } else {
+                badge.textContent = count;
+                badge.classList.remove('mention-badge');
+            }
         } else if (badge) {
             badge.remove();
         }

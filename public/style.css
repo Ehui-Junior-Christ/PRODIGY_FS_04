@@ -1845,5 +1845,81 @@ body.theme-orange {
     color: var(--text-primary);
 }
 
+/* ========== MENTION BADGE & ONLINE USER VISIBILITY SYSTEM ========== */
 
+/* Badge spécial pour les mentions dans la sidebar des canaux */
+.unread-badge.mention-badge {
+    background: var(--error);
+    color: #fff;
+    font-weight: 800;
+    animation: mentionPulse 2s ease-in-out infinite;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes mentionPulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 16px rgba(239, 68, 68, 0.7); }
+}
+
+/* Labels de groupe (En ligne / Hors-ligne) dans la liste des membres */
+.user-group-label {
+    font-size: 0.68rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary) !important;
+    padding: 0.5rem 0.5rem 0.25rem !important;
+    cursor: default !important;
+    display: flex !important;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.user-group-label:first-child {
+    margin-top: 0;
+}
+
+.user-group-label:hover {
+    background: transparent !important;
+}
+
+.user-group-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.user-group-dot.online {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+}
+
+/* Utilisateur en ligne : texte plus lumineux et point vert avec glow */
+.user-online-item {
+    color: var(--text-primary) !important;
+}
+
+.user-online-item .status-dot.online {
+    box-shadow: 0 0 6px var(--success);
+    animation: onlineDotPulse 3s ease-in-out infinite;
+}
+
+@keyframes onlineDotPulse {
+    0%, 100% { box-shadow: 0 0 4px var(--success); transform: scale(1); }
+    50% { box-shadow: 0 0 10px var(--success); transform: scale(1.2); }
+}
+
+/* Mise en évidence des messages qui mentionnent l'utilisateur courant */
+.message-mention-highlight {
+    border-left: 3px solid var(--error) !important;
+    background: rgba(239, 68, 68, 0.06) !important;
+    padding-left: 0.5rem;
+    border-radius: 4px;
+}
 
