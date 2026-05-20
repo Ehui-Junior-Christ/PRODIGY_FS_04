@@ -916,7 +916,12 @@ io.on('connection', async (socket) => {
                                 }
                             });
                             
-                            webpush.sendNotification(subscription, payload).catch(err => {
+                            const options = {
+                                TTL: 86400, // Conserver la notification pendant 24h et la délivrer dès que l'appareil est en ligne
+                                urgency: 'high' // Forcer la livraison immédiate dès que la connexion est établie
+                            };
+                            
+                            webpush.sendNotification(subscription, payload, options).catch(err => {
                                 if (err.statusCode === 410 || err.statusCode === 404) {
                                     db.execute({
                                         sql: `DELETE FROM push_subscriptions WHERE subscription = ?`,
