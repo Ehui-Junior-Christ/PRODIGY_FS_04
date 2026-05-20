@@ -1748,7 +1748,7 @@ body.theme-orange {
 }
 
 .slide-icon {
-    color: var(--text-primary);
+    color: #ffffff !important;
     position: relative;
     z-index: 2;
     filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.3));
@@ -1790,27 +1790,30 @@ body.theme-orange {
     font-weight: 600;
     margin-bottom: 0.5rem;
     letter-spacing: -0.02em;
+    color: #ffffff !important;
 }
 
 .slide-title span {
     font-family: var(--font-sans);
     font-weight: 300;
-    color: var(--text-secondary);
+    color: #ffffff !important;
 }
 
 .slide-subtitle {
     font-size: 1rem;
     font-weight: 500;
-    color: var(--text-secondary);
+    color: #ffffff !important;
     margin-bottom: 1.25rem;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+    opacity: 0.95;
 }
 
 .slide-description {
     font-size: 0.95rem;
     line-height: 1.6;
-    color: var(--text-secondary);
+    color: #ffffff !important;
+    opacity: 0.85;
     max-width: 380px;
 }
 
