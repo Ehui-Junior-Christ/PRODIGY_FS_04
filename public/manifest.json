@@ -1,0 +1,24 @@
+{
+  "name": "Prodigy Chat",
+  "short_name": "Prodigy",
+  "description": "Messagerie en temps réel - Édition Premium",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f11",
+  "theme_color": "#f97316",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "maskable"
+    }
+  ]
+}
