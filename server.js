@@ -22,7 +22,9 @@ webpush.setVapidDetails(
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    maxHttpBufferSize: 25 * 1024 * 1024 // Limite à 25 Mo pour supporter les fichiers encodés en base64 de 15 Mo
+    maxHttpBufferSize: 25 * 1024 * 1024, // Limite à 25 Mo pour supporter les fichiers encodés en base64 de 15 Mo
+    pingTimeout: 5000,   // Détection ultra-rapide des déconnexions (5 secondes)
+    pingInterval: 10000  // Pings fréquents toutes les 10 secondes pour maintenir le canal actif
 });
 
 const PORT = process.env.PORT || 3001;
@@ -162,6 +164,13 @@ async function initDb() {
             subscription TEXT UNIQUE,
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
+
+        // Indexation de la base de données pour accélérer le chargement des messages et les requêtes en temps réel
+        await db.execute(`CREATE INDEX IF NOT EXISTS idx_messages_room_id ON messages(room_id)`);
+        await db.execute(`CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id)`);
+        await db.execute(`CREATE INDEX IF NOT EXISTS idx_room_members_room_user ON room_members(room_id, user_id)`);
+
+        console.log('Indexation de la base de données terminée.');
 
         // Nettoyage périodique automatique toutes les 30 secondes des messages et fichiers expirés (5, 10, 15, 30 min ou max 24 heures)
         setInterval(async () => {

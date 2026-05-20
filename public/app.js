@@ -88,6 +88,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 initPushNotifications();
             })
             .catch(err => console.error('Erreur d\'enregistrement du Service Worker:', err));
+
+        // Mettre à jour automatiquement la page dès qu'un nouveau Service Worker s'active
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            window.location.reload();
+        });
     }
 
     // Check Authentication on load
@@ -355,14 +360,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket = io({
             auth: { token },
-            transports: ['polling', 'websocket'], // Force HTTP Polling first for 100% mobile connectivity, then upgrade to WebSocket
+            transports: ['websocket', 'polling'], // Tenter en priorité la connexion WebSocket directe (ultra-rapide), puis repli si besoin
             upgrade: true,
             rememberUpgrade: true,
             reconnection: true,
             reconnectionAttempts: Infinity,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            timeout: 20000
+            reconnectionDelay: 500, // Reconnexion très agressive (500ms au lieu de 1s) pour ne manquer aucun message
+            reconnectionDelayMax: 3000,
+            timeout: 10000
         });
 
         socket.on('connect', () => {
